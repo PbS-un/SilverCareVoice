@@ -64,7 +64,7 @@ npm run dev:all        # server 8787 + web 5173
 | `npm run dev:server` | 後端 server（8787） |
 | `npm run dev:all` | 前後端同時啟動 |
 | `npm run build` | 構建前端（tsc --noEmit + vite build → web/dist） |
-| `npm test` | 單元測試（Vitest，實測 17 files / 279 cases） |
+| `npm test` | 單元測試（Vitest，實測 17 files / 285 cases） |
 | `npm run test:e2e` | E2E 測試（Playwright，16 cases） |
 | `node scripts/generate-pdf.mjs` | 生成項目簡報 PDF（≤5 頁 A4，內含實機截圖） |
 | `node scripts/generate-pdf.mjs --url <URL>` | 發布後重生成 PDF（真實 URL + QR Code） |
