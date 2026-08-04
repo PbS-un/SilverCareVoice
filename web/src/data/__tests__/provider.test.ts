@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { IndexedDBProvider } from '../IndexedDBProvider';
 import { seedData } from '../seed';
+import { KNOWLEDGE_BASE } from '../knowledgeBase';
 import type { MedicationLog, VitalRecord } from '../../types/entities';
 
 const ELDER_ID = 'seed-elder-01';
@@ -64,7 +65,7 @@ describe('IndexedDBProvider — seed 寫入與查詢', () => {
     expect(await provider.list('caregivers')).toHaveLength(1);
     expect(await provider.list('medications')).toHaveLength(2);
     expect(await provider.list('resourceDirectory')).toHaveLength(6);
-    expect(await provider.list('knowledgeDocuments')).toHaveLength(0); // T9 導入，此處留空
+    expect(await provider.list('knowledgeDocuments')).toHaveLength(KNOWLEDGE_BASE.length); // T9 已導入知識庫
   });
 });
 

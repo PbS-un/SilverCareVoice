@@ -3,11 +3,13 @@
  *
  * 所有 ID 用穩定前綴（'seed-*'），方便測試斷言與 reset 還原。
  * 時間一律 ISO-8601 string，並相對「現在」動態生成（確保 demo 任何一天都合理）。
- * KnowledgeDocument 刻意留空 —— 知識庫由 T9 任務導入，本任務不代寫。
+ * KnowledgeDocument 由 T9 任務導入：內容定義於 ./knowledgeBase.ts，
+ * 此處直接併入 seed；ensureKnowledgeLoaded() 亦會在表為空時冪等補導。
  */
 
 import type { SeedData } from './DataProvider';
 import type { MedicationLog } from '../types/entities';
+import { KNOWLEDGE_BASE } from './knowledgeBase';
 
 const ELDER_ID = 'seed-elder-01';
 const CAREGIVER_ID = 'seed-caregiver-01';
@@ -471,6 +473,6 @@ export const seedData: SeedData = {
     },
   ],
 
-  /** 知識庫由 T9 任務導入，本任務不代寫內容。 */
-  knowledgeDocuments: [],
+  /** 澳門長者知識庫（T9）：policy / health / service 共 31 條。 */
+  knowledgeDocuments: [...KNOWLEDGE_BASE],
 };
