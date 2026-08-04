@@ -33,6 +33,7 @@ import type {
   KnowledgeDocument,
 } from '../types/entities';
 import { IndexedDBProvider } from './IndexedDBProvider';
+import { SyncedProvider, type SyncMode } from './sync/outbox';
 // SupabaseProvider 為 stub，未配置時不啟用（啟用條件見該檔案註釋）。
 // import { SupabaseProvider } from './SupabaseProvider';
 
@@ -94,22 +95,38 @@ export interface DataProvider {
   subscribe?(cb: SubscribeCallback): Unsubscribe;
 }
 
-let providerSingleton: DataProvider | null = null;
+let providerSingleton: SyncedProvider | null = null;
 
 /**
- * 執行時工廠：目前一律回傳 IndexedDBProvider（Dexie，離線優先）。
+ * 執行時工廠：回傳 SyncedProvider（包裝 IndexedDBProvider，local-first）。
  *
- * 未來切換註記：
- * - 啟用 Supabase（設定 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY，
- *   並執行 supabase/schema.sql）後，可在此改回傳 SupabaseProvider，
- *   或以「本地 IndexedDB + 背景同步」混合模式實作。
- * - 本檔案絕不讀取任何密鑰值；前端只用 anon key（見 .env.example）。
+ * T8 同步接入（上層完全無感）：首次取用時於背景探測 sync server
+ * （GET /api/health，~2s 超時）。可達 → 啟用雙裝置同步（bootstrap/pull +
+ * WS + Outbox）；不可達 → 維持 standalone（純 IndexedDB）。探測絕不阻塞
+ * App，亦無任何 build flag / demo-only 分支。
+ *
+ * 注意：本檔案絕不讀取任何密鑰值；前端只用 anon key（見 .env.example）。
  */
 export function getProvider(): DataProvider {
   if (!providerSingleton) {
-    providerSingleton = new IndexedDBProvider();
+    providerSingleton = new SyncedProvider(new IndexedDBProvider());
+    // 測試環境（vitest）不自動探測，改由測試以 enableSync() 顯式控制。
+    if (typeof window !== 'undefined' && import.meta.env.MODE !== 'test') {
+      void providerSingleton.enableSync().catch(() => {
+        /* 永不發生：enableSync 內部已全量 catch */
+      });
+    }
   }
   return providerSingleton;
+}
+
+/**
+ * 顯式啟用同步（冪等）。回傳 'sync'（server 可達）或 'standalone'。
+ * getProvider() 已自動呼叫；此匯出供需要等待結果的場景（如診斷 UI）使用。
+ */
+export function enableSync(): Promise<SyncMode> {
+  const p = getProvider() as SyncedProvider;
+  return p.enableSync();
 }
 
 /** 測試專用：重置 singleton（生產代碼不要使用）。 */
