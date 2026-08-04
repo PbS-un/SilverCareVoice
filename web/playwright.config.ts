@@ -3,6 +3,9 @@ import { defineConfig } from '@playwright/test'
 /** 最小 node 環境型別（唔引入 @types/node，避免影響前端型別空間）。 */
 declare const process: { env: Record<string, string | undefined> };
 
+/** E2E 固定 sync 配對 token（server env 與客戶端 storageState 必須一致）。 */
+const E2E_SYNC_TOKEN = 'e2e-sync-token'
+
 /**
  * E2E 配置（T10）。
  *
@@ -12,13 +15,19 @@ declare const process: { env: Record<string, string | undefined> };
  *     server 一律回 { provider:'local', reason:'no_key' }，
  *     客戶端確定性行 LocalHybridEngine —— 唔依賴真實 API Key。
  *     （「proxy 回 deepseek provider 客戶端採用」場景由 page.route mock /api/ai/chat 驗證。）
- *     ⚠️ reuseExistingServer: false —— 絕不復用本機已運行嘅 dev server，
- *     因為開發者嘅 server/.env 可能帶真實 DEEPSEEK_API_KEY；
- *     若 8787 已被佔用，Playwright 會即時報錯提示先停止該進程。
+ *     SYNC_TOKEN 固定為 E2E_SYNC_TOKEN（/sync/* 與 WS 鑑權；Warning 5 修復）。
  *  2. vite dev server（埠 5173）—— 已配置 /api、/sync、/ws proxy 去 8787。
+ *
+ * globalSetup：server 就緒後在 server 端做一次 demo seed（tombstone 現存實體
+ * ＋重蓋章 seed put），保證 sync 模式下每個 E2E 執行從乾淨示範資料出發
+ * （App 只在 standalone 空庫自動 demoReset —— Warning 3 修復後的語義）。
+ *
+ * storageState：預載 localStorage scv.syncToken，令所有測試的 SyncClient /
+ * Outbox 自動通過 token 鑑權，無需改動各 spec。
  */
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: './src/data/sync/scripts/e2e-global-setup.ts',
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
@@ -28,6 +37,16 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'retain-on-failure',
+    // 每個測試 context 預載 sync token（等同裝置已完成配對）
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: 'http://localhost:5173',
+          localStorage: [{ name: 'scv.syncToken', value: E2E_SYNC_TOKEN }],
+        },
+      ],
+    },
   },
   webServer: [
     {
@@ -40,6 +59,8 @@ export default defineConfig({
       env: {
         // 確定性：E2E 絕不調真實 DeepSeek
         DEEPSEEK_API_KEY: '',
+        // E2E 固定 sync token（與 storageState / globalSetup 一致）
+        SYNC_TOKEN: E2E_SYNC_TOKEN,
       },
     },
     {

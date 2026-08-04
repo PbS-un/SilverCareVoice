@@ -206,13 +206,90 @@ describe('SyncClient / SyncedProvider', () => {
     expect(localStorage.getItem(LS_SYNC_CURSOR)).toBe('7');
   });
 
+  it('舊版 ISO 時間游標自動丟棄 → 改走 bootstrap（cursor 語義遷移）', async () => {
+    localStorage.setItem(LS_SYNC_CURSOR, '2026-08-04T00:00:00.000Z'); // 舊語義：ISO 時間
+    let bootstrapCalled = 0;
+    let pullCalled = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith('/api/health')) return okJson({ ok: true });
+      if (url.startsWith('/sync/bootstrap')) {
+        bootstrapCalled += 1;
+        return okJson({ serverTime: '2026-08-05T00:00:00.000Z', cursor: '12', entities: [] });
+      }
+      if (url.startsWith('/sync/pull')) {
+        pullCalled += 1;
+        return okJson({ ops: [], cursor: '12', serverTime: '2026-08-05T00:00:00.000Z' });
+      }
+      return okJson({ applied: [], rejected: [], duplicated: [], serverTime: '2026-08-05T00:00:00.000Z' });
+    });
+    provider = makeProvider();
+    const mode = await provider.enableSync(fetchMock as unknown as typeof fetch);
+    expect(mode).toBe('sync');
+    expect(bootstrapCalled).toBe(1); // 舊游標被丟棄 → 全量
+    expect(pullCalled).toBe(0);
+    expect(localStorage.getItem(LS_SYNC_CURSOR)).toBe('12'); // 新語義：seq
+  });
+
+  it('LWW 平手 tiebreaker：updatedAt 相同時 deviceId 字典序大者勝（與 server 一致）', async () => {
+    const T = '2026-08-05T00:00:00.000Z';
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith('/api/health')) return okJson({ ok: true });
+      if (url.startsWith('/sync/bootstrap')) {
+        return okJson({
+          serverTime: T,
+          cursor: '5',
+          entities: [
+            {
+              // 平手且遠端 deviceId 較大 → 遠端勝
+              tbl: 'VitalRecord',
+              entityId: 'tie-remote-wins',
+              updatedAt: T,
+              payload: { id: 'tie-remote-wins', value: 111, unit: 'X' },
+              deleted: false,
+              deviceId: 'zzz-device',
+            },
+            {
+              // 平手且遠端 deviceId 較小 → 本地勝
+              tbl: 'VitalRecord',
+              entityId: 'tie-local-wins',
+              updatedAt: T,
+              payload: { id: 'tie-local-wins', value: 222, unit: 'X' },
+              deleted: false,
+              deviceId: '000-device',
+            },
+          ],
+        });
+      }
+      return okJson({ ops: [], cursor: '5', serverTime: T });
+    });
+
+    const inner = new IndexedDBProvider(`sc-sync-test-${dbSeq}`);
+    // 本地兩筆與遠端同刻（writer 記為 'mmm-device'，介於 000 與 zzz 之間）
+    await inner.bulkPut([
+      {
+        table: 'vitalRecords',
+        entity: { id: 'tie-remote-wins', createdAt: T, updatedAt: T, value: 1, _writerDeviceId: 'mmm-device' } as unknown as VitalRecord,
+      },
+      {
+        table: 'vitalRecords',
+        entity: { id: 'tie-local-wins', createdAt: T, updatedAt: T, value: 2, _writerDeviceId: 'mmm-device' } as unknown as VitalRecord,
+      },
+    ]);
+
+    provider = new SyncedProvider(inner, `sc-outbox-test-${dbSeq}`);
+    await provider.enableSync(fetchMock as unknown as typeof fetch);
+
+    expect((await provider.get<VitalRecord>('vitalRecords', 'tie-remote-wins'))?.value).toBe(111); // 遠端勝
+    expect((await provider.get<VitalRecord>('vitalRecords', 'tie-local-wins'))?.value).toBe(2); // 本地勝
+  });
+
   it('WS change ops apply 到本地並觸發 subscribe 通知', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.startsWith('/api/health')) return okJson({ ok: true });
       if (url.startsWith('/sync/bootstrap')) {
-        return okJson({ serverTime: '2026-08-05T00:00:00.000Z', entities: [] });
+        return okJson({ serverTime: '2026-08-05T00:00:00.000Z', cursor: '7', entities: [] });
       }
-      return okJson({ ops: [], cursor: '2026-08-05T00:00:00.000Z', serverTime: '2026-08-05T00:00:00.000Z' });
+      return okJson({ ops: [], cursor: '8', serverTime: '2026-08-05T00:00:00.000Z' });
     });
 
     provider = makeProvider();

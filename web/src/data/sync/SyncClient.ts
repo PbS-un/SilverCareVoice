@@ -173,7 +173,7 @@ export class SyncClient {
    * 單頁 1000 筆，滿頁即以新 cursor 續拉（分頁）。
    */
   async pull(): Promise<void> {
-    let since = this.readCursor();
+    let since: string = this.readCursor() ?? '';
     if (!since) return this.bootstrap();
     for (let page = 0; page < PULL_MAX_PAGES; page += 1) {
       const res = await this.authFetch(`/sync/pull?since=${encodeURIComponent(since)}`);
@@ -318,7 +318,8 @@ export class SyncClient {
       const existing = await this.inner.get<BaseEntity>(table, op.entityId);
       if (existing) {
         const localWriter =
-          ((existing as Record<string, unknown>)[WRITER_FIELD] as string | undefined) ?? this.deviceId;
+          ((existing as unknown as Record<string, unknown>)[WRITER_FIELD] as string | undefined) ??
+          this.deviceId;
         const wins =
           op.updatedAt > existing.updatedAt ||
           (op.updatedAt === existing.updatedAt && writer > localWriter);
@@ -334,7 +335,7 @@ export class SyncClient {
             id: op.entityId,
             updatedAt: op.updatedAt,
             [WRITER_FIELD]: writer,
-          } as BaseEntity,
+          } as unknown as BaseEntity,
         });
       }
     }
