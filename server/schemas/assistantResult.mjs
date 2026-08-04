@@ -25,7 +25,7 @@ export const INTENTS = [
   'unknown',
 ]
 
-export const RISK_LEVELS = ['normal', 'caution', 'urgent']
+export const RISK_LEVELS = ['normal', 'attention', 'urgent']
 
 /** 生命體徵 / 用藥抽取欄位（皆可選，允許 passthrough 擴展） */
 export const ExtractedDataSchema = z
