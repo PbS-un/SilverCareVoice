@@ -15,6 +15,7 @@ build/
 *.sqlite
 *.sqlite3
 *.db
+server/data/
 
 # Playwright artifacts
 playwright-report/
