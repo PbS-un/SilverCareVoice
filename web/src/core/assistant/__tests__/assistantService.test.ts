@@ -145,6 +145,40 @@ describe('AssistantService — 健康紀錄查詢（真查 DB，動態答案）'
   });
 });
 
+describe('AssistantService — 家人狀態查詢（實查 Alert，動態答案）', () => {
+  it('冇未處理 Alert → 答案講明冇未處理跟進事項', async () => {
+    const res = await ask(ELDER_ID, '我個仔有冇消息呀？');
+    expect(res.intent).toBe('family_status_query');
+    expect(res.answer).toContain('冇未處理');
+    expect(res.answer).toContain('阿美'); // seed 照顧者名稱
+  });
+
+  it('有未處理 urgent Alert → 答案講「家人跟進緊」並按 severity 描述', async () => {
+    // 先觸發 urgent 路徑建 Alert
+    const risk = await ask(ELDER_ID, '我胸口突然好痛');
+    expect(risk.alertId).toBeDefined();
+
+    const res = await ask(ELDER_ID, '我個仔有冇消息呀？');
+    expect(res.intent).toBe('family_status_query');
+    expect(res.answer).toContain('跟進緊你嘅情況');
+    expect(res.answer).toContain('緊急');
+    expect(res.answer).not.toContain('冇未處理');
+  });
+
+  it('Alert 已跟進（resolved）後 → 答案回到「冇未處理」', async () => {
+    const risk = await ask(ELDER_ID, '我胸口突然好痛');
+    const provider = getProvider();
+    const alert = await provider.get<Alert>(tableNameOf('Alert'), risk.alertId!);
+    expect(alert).toBeDefined();
+
+    const { followUpAlert: followUp } = await import('../../../services/AlertService');
+    await followUp(risk.alertId!, alert!.caregiverId, 'phone', '已聯絡');
+
+    const res = await ask(ELDER_ID, '我個仔有冇消息呀？');
+    expect(res.answer).toContain('冇未處理');
+  });
+});
+
 describe('AssistantService — 高風險安全攔截（唔行 LLM）', () => {
   it('「我胸口突然好痛」→ urgent、Alert urgent、完全冇調 fetch', async () => {
     const res = await ask(ELDER_ID, '我胸口突然好痛');

@@ -12,6 +12,9 @@ declare const process: { env: Record<string, string | undefined> };
  *     server 一律回 { provider:'local', reason:'no_key' }，
  *     客戶端確定性行 LocalHybridEngine —— 唔依賴真實 API Key。
  *     （「proxy 回 deepseek provider 客戶端採用」場景由 page.route mock /api/ai/chat 驗證。）
+ *     ⚠️ reuseExistingServer: false —— 絕不復用本機已運行嘅 dev server，
+ *     因為開發者嘅 server/.env 可能帶真實 DEEPSEEK_API_KEY；
+ *     若 8787 已被佔用，Playwright 會即時報錯提示先停止該進程。
  *  2. vite dev server（埠 5173）—— 已配置 /api、/sync、/ws proxy 去 8787。
  */
 export default defineConfig({
@@ -30,7 +33,9 @@ export default defineConfig({
     {
       command: 'node ../server/index.mjs',
       url: 'http://localhost:8787/api/health',
-      reuseExistingServer: !process.env.CI,
+      // 絕不復用既有進程：避免誤用帶真實 DEEPSEEK_API_KEY 嘅本地 dev server。
+      // 8787 被佔用時 Playwright 會報錯，提示先停止該 dev server。
+      reuseExistingServer: false,
       timeout: 60_000,
       env: {
         // 確定性：E2E 絕不調真實 DeepSeek

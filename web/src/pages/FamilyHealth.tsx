@@ -171,7 +171,11 @@ export default function FamilyHealth() {
               <LineChart data={bpData} margin={{ top: 8, right: 8, bottom: 0, left: -14 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--sc-line)" />
                 <XAxis dataKey="day" tick={{ fontSize: 13 }} />
-                <YAxis tick={{ fontSize: 13 }} domain={[50, 200]} />
+                {/* 下限 50；上限動態：至少 200，急症高位（如 220+）都完整可見 */}
+                <YAxis
+                  tick={{ fontSize: 13 }}
+                  domain={[50, (dataMax: number) => Math.max(200, dataMax + 10)]}
+                />
                 {/* 參考帶：一般血壓範圍 */}
                 <ReferenceArea y1={90} y2={140} fill="var(--sc-ok)" fillOpacity={0.08} />
                 <Tooltip />

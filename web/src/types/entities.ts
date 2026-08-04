@@ -1,7 +1,7 @@
 /**
  * SilverCare Voice — 資料層實體定義（T2）
  *
- * 18 個核心實體，全部包含 `id` / `createdAt` / `updatedAt`（ISO-8601 string）。
+ * 19 個核心實體，全部包含 `id` / `createdAt` / `updatedAt`（ISO-8601 string）。
  * 運行時 ID 一律用 crypto.randomUUID()；seed 資料用穩定前綴 ID（'seed-*'）。
  * 與 supabase/schema.sql（snake_case）一一對應。
  */

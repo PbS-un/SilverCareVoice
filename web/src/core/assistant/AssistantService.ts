@@ -49,7 +49,7 @@ import { localHybridEngine, type AssistantContext as LocalContext } from './Loca
 import { chatViaProxy, probeProxy } from './DeepSeekClient';
 import { evaluate, type RuleInput, type RuleProfile } from '../rules/HealthRuleEngine';
 import { searchKnowledge } from '../kb/search';
-import { createAlertsForEvents } from '../../services/AlertService';
+import { createAlertsForEvents, listOpenAlerts } from '../../services/AlertService';
 
 /** 統一免責聲明（UI 顯示 answer 時附加）。 */
 export const HEALTH_DISCLAIMER = '以上為健康資訊，唔係醫療診斷。';
@@ -263,7 +263,7 @@ async function buildAppointmentAnswer(elderId: string): Promise<{ answer: string
   };
 }
 
-/** family_status_query：查照顧者／跟進記錄，組合理回應。 */
+/** family_status_query：實查未完成 Alert 與照顧者資料，動態組合理回應（絕無硬編碼答案）。 */
 async function buildFamilyStatusAnswer(elderId: string): Promise<{ answer: string }> {
   const provider = getProvider();
   const links = await provider.list<CaregiverLink>(tableNameOf('CaregiverLink'), { elderId });
@@ -272,7 +272,19 @@ async function buildFamilyStatusAnswer(elderId: string): Promise<{ answer: strin
   }
   const caregiver = await provider.get<Caregiver>(tableNameOf('Caregiver'), links[0].caregiverId);
   const name = caregiver?.name ?? '家人';
-  return { answer: `你嘅${name}而家冇未處理嘅緊急跟進事項，你唔使太擔心。如果想佢，可以叫我幫你聯絡佢呀。` };
+
+  // 實查：該長者未完成（open / acknowledged）嘅 Alert
+  const openAlerts = await listOpenAlerts(elderId);
+  if (openAlerts.length > 0) {
+    const hasUrgent = openAlerts.some((a) => a.severity === 'urgent');
+    const desc = hasUrgent
+      ? '有一項緊急情況，佢哋已經收到通知'
+      : '正喺度跟進你嘅健康情況';
+    return {
+      answer: `你嘅${name}而家跟進緊你嘅情況：${desc}，共有 ${openAlerts.length} 項跟進事項。你唔使太擔心呀。`,
+    };
+  }
+  return { answer: `你嘅${name}而家冇未處理嘅跟進事項，你唔使太擔心。如果想佢，可以叫我幫你聯絡佢呀。` };
 }
 
 /* ------------------------------ 主流程 ------------------------------ */

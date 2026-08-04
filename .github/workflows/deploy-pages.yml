@@ -36,7 +36,9 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # 只安裝 web workspace 依賴：Pages 構建唔需要 server 嘅原生模組
+        # （better-sqlite3 等），加快 CI 亦避免原生編譯失敗風險。
+        run: npm ci --workspace web
 
       - name: Build web
         run: npm run build
@@ -44,6 +46,11 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
+      - name: Add .nojekyll
+        # 與本地腳本（scripts/deploy-pages.mjs）一致：
+        # 避免 GitHub Pages Jekyll 忽略 _ 開頭路徑／資源。
+        run: touch web/dist/.nojekyll
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

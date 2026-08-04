@@ -12,7 +12,7 @@
 | Functional Prototype URL | **待發布（PENDING）** —— 需由用戶 push 並啟用 GitHub Pages 後取得 |
 | GitHub Pages | **待用戶 push**（`.github/workflows/deploy-pages.yml` 已備妥；本地 `gh-pages` branch 已建） |
 | Release Branch | 本地 `gh-pages`（orphan branch）已建立，commit `a5c73e1`，內容為 `web/dist` 完整構建產物＋`.nojekyll`；**未 push** |
-| Backend | Local Node Sync Server（埠 8787）：AI Proxy（DeepSeek）＋雙裝置同步（HTTP + WebSocket + SQLite） |
+| Backend | Local Node Sync Server（埠 8787）：AI Proxy（DeepSeek）＋雙裝置同步（HTTP + WebSocket + SQLite）。同步端點使用配對 token（見 server/README.md） |
 | AI | DeepSeek（經本地 proxy，Key 只存 `server/.env`）＋ **Local Hybrid Engine 離線 fallback**（無 Key／離線時全本地運行） |
 | Database | IndexedDB（Dexie，前端本地優先）＋ SQLite（server 同步中繼）；備選 Supabase schema 見 `supabase/` |
 
@@ -72,17 +72,17 @@ Demo Reset → 同意頁 → /elder 輸入「我啱啱血壓158/95，仲有啲�
 | --- | --- | --- | --- |
 | 1 | Free text input（自由文字輸入→寫庫＋回答） | **PASS** | Playwright E2E `ui-smoke`＋`free-input` 40 cases（Vitest） |
 | 2 | Voice input fallback（ASR 不支援時文字輸入常駐） | **PASS** | Vitest `asr.test.ts`（23）＋`tts.test.ts`（15）；UI 文字輸入路徑 E2E 覆蓋 |
-| 3 | Dynamic vital/medication/symptom 記錄 | **PASS** | Vitest `assistantService`／`extraction`（36）／`free-input`（41）；E2E 血壓寫庫 |
+| 3 | Dynamic vital/medication/symptom 記錄 | **PASS** | Vitest `assistantService`／`extraction`（36）／`free-input`（40）；E2E 血壓寫庫 |
 | 4 | Dynamic chart／risk event | **PASS** | Vitest `healthRuleEngine`（25）；PDF/影片截圖實見圖表新點 |
 | 5 | Elder → family alert | **PASS** | E2E `flagship`（血壓偏高→家屬提醒）；影片實錄 |
-| 6 | Follow-up（已跟進→CaregiverFollowUp→Alert resolved） | **PASS** | Vitest `alertService`（7）；E2E＋影片實錄 |
+| 6 | Follow-up（已跟進→CaregiverFollowUp→Alert resolved） | **PASS** | Vitest `alertService`（9，含 Alert 去重）；E2E＋影片實錄 |
 | 7 | Timeline（六表合併時間線） | **PASS** | E2E `flagship`／`routes` 覆蓋 /family/health |
 | 8 | 7-day query（vitalsBetween 區間查詢） | **PASS** | Vitest `provider.test.ts`（10） |
 | 9 | Policy search（知識庫政策搜尋） | **PASS** | Vitest `kb/search.test.ts`（17，31 篇文檔） |
 | 10 | Safety flow（高風險攔截唔行 LLM） | **PASS** | Vitest `safetyScreen.test.ts`（15） |
 | 11 | Persistence（reload 後數據仍在） | **PASS** | E2E `persistence.spec.ts` |
 | 12 | Lint／Build | **PASS** | `tsc --noEmit` 零錯誤；`vite build` 成功（886 modules） |
-| 13 | Vitest 單元測試 | **PASS** | 實測 **17 files / 274 tests 全綠**（11.15s） |
+| 13 | Vitest 單元測試 | **PASS** | 實測 **17 files / 279 tests 全綠**（11.2s；2026-08-05 重跑實測值，並行任務如再增測試數字會相應變化） |
 | 14 | Playwright E2E | **PASS** | 實測 **16 passed**（30.5s） |
 | 15 | PDF ≤ 5 頁 | **PASS** | pdf-lib 實測 `getPageCount() === 5`，A4（595×842pt） |
 | 16 | GitHub Pages 線上可達 | **PENDING** | 需用戶 push 後才可驗證（見第 5 節） |

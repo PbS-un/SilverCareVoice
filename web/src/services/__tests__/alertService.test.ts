@@ -70,6 +70,54 @@ describe('AlertService — Alert 建立', () => {
     expect(alerts[0].severity).toBe('urgent');
     expect(alerts[0].message).toContain('緊急');
   });
+
+  it('去重：重複同類型 urgent 事件（胸痛）唔會建第二條 Alert，只更新原 Alert', async () => {
+    const e1 = makeEvent('urgent', '提及高風險症狀：胸口痛。（第一次）');
+    await getProvider().put(tableNameOf('HealthEvent'), e1);
+    const first = await createAlertsForEvent(e1);
+    expect(first).toHaveLength(1);
+
+    const e2 = makeEvent('urgent', '提及高風險症狀：胸口痛。（第二次）');
+    await getProvider().put(tableNameOf('HealthEvent'), e2);
+    const second = await createAlertsForEvent(e2);
+
+    // 冇新建：urgent Alert 仍然只有一條，ID 不變
+    const all = await getProvider().list<Alert>(tableNameOf('Alert'), { elderId: ELDER_ID });
+    const urgentAlerts = all.filter((a) => a.severity === 'urgent');
+    expect(urgentAlerts).toHaveLength(1);
+    expect(second[0].id).toBe(first[0].id);
+    // message／updatedAt 已更新
+    expect(second[0].message).toContain('第二次');
+    expect(second[0].status).toBe('open');
+
+    // createAlertsForEvents 批次入口同樣去重
+    const e3 = makeEvent('urgent', '提及高風險症狀：胸口痛。（第三次）');
+    await getProvider().put(tableNameOf('HealthEvent'), e3);
+    const third = await createAlertsForEvents([e3]);
+    expect(third).toHaveLength(1);
+    expect(third[0].id).toBe(first[0].id);
+    const allAfter = await getProvider().list<Alert>(tableNameOf('Alert'), { elderId: ELDER_ID });
+    expect(allAfter.filter((a) => a.severity === 'urgent')).toHaveLength(1);
+  });
+
+  it('去重只限同類型 open Alert：唔同類型仍建新 Alert；resolved 後同類型會再新建', async () => {
+    const e1 = makeEvent('urgent', '提及高風險症狀：胸口痛。');
+    await getProvider().put(tableNameOf('HealthEvent'), e1);
+    const [a1] = await createAlertsForEvent(e1);
+    // 唔同 event.type → 正常新建（makeEvent 預設 type 係 'bp_high'）
+    const e2 = { ...makeEvent('attention', '血糖偏高。'), type: 'glucose_high' };
+    await getProvider().put(tableNameOf('HealthEvent'), e2);
+    const [a2] = await createAlertsForEvent(e2);
+    expect(a2.id).not.toBe(a1.id);
+
+    // resolve 咗之後，同類型新事件會重新建 Alert
+    await followUpAlert(a1.id, CAREGIVER_ID, 'phone', '已聯絡');
+    const e3 = makeEvent('urgent', '提及高風險症狀：胸口痛。（再現）');
+    await getProvider().put(tableNameOf('HealthEvent'), e3);
+    const [a3] = await createAlertsForEvent(e3);
+    expect(a3.id).not.toBe(a1.id);
+    expect(a3.status).toBe('open');
+  });
 });
 
 describe('AlertService — acknowledge / followUp', () => {

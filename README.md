@@ -22,8 +22,8 @@
 
 - `server/`（埠 **8787**）提供：
   - **AI Proxy**：`POST /api/ai/chat` —— DeepSeek API Key 只存後端（`server/.env`），絕不下發前端；無 Key 時自動回 `provider:'local'`，前端確定性走 Local Hybrid Engine。
-  - **雙裝置同步**：`/sync/bootstrap`、`/sync/pull`、`/sync/push` + WebSocket `/ws`，SQLite 中繼，長者手機與家屬電腦在區網內實時同步。
-- 前端 `vite dev`（5173）已配置 `/api`、`/sync`、`/ws` 代理至 8787。
+  - **雙裝置同步**：`/sync/bootstrap`、`/sync/pull`、`/sync/push` + WebSocket `/ws`，SQLite 中繼，長者手機與家屬電腦在區網內實時同步。同步端點使用配對 token（見 server/README.md）。
+- 前端 `vite dev`（5173）已配置 `/api`、`/sync`、`/ws` 代理至 8787；dev server 已監聽 `0.0.0.0`（`host: true`），第二裝置（如長者手機）在區網內用 `http://<電腦 LAN IP>:5173` 即可訪問，毋需額外配置。
 
 ---
 
@@ -64,7 +64,7 @@ npm run dev:all        # server 8787 + web 5173
 | `npm run dev:server` | 後端 server（8787） |
 | `npm run dev:all` | 前後端同時啟動 |
 | `npm run build` | 構建前端（tsc --noEmit + vite build → web/dist） |
-| `npm test` | 單元測試（Vitest，359 cases） |
+| `npm test` | 單元測試（Vitest，實測 17 files / 279 cases） |
 | `npm run test:e2e` | E2E 測試（Playwright，16 cases） |
 | `node scripts/generate-pdf.mjs` | 生成項目簡報 PDF（≤5 頁 A4，內含實機截圖） |
 | `node scripts/generate-pdf.mjs --url <URL>` | 發布後重生成 PDF（真實 URL + QR Code） |

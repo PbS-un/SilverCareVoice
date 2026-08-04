@@ -39,7 +39,9 @@ function buildAlertMessage(event: HealthEvent, elderName: string): string {
 /**
  * 為一個健康事件建立 Alert：
  * 搵出該長者所有 consentGiven 嘅 CaregiverLink，每位 caregiver 建一個 open Alert。
- * 回傳建立咗嘅 Alert（冇授權照顧者時回傳空陣列）。
+ * 去重：同長者＋同 event.type 已有 open Alert 時，只更新原 Alert
+ * （message／severity／healthEventId／updatedAt），唔會重複建立。
+ * 回傳本次寫入嘅 Alert（新建或更新後；冇授權照顧者時回傳空陣列）。
  */
 export async function createAlertsForEvent(event: HealthEvent): Promise<Alert[]> {
   if (event.severity === 'normal') return [];
@@ -55,8 +57,34 @@ export async function createAlertsForEvent(event: HealthEvent): Promise<Alert[]>
   const message = buildAlertMessage(event, elderName);
   const t = isoNow();
 
+  // 去重：查同長者名下 open 且對應事件類型相同嘅既有 Alert
+  const existing = await provider.list<Alert>(tableNameOf('Alert'), { elderId: event.elderId });
+  const openDupes: Alert[] = [];
+  for (const alert of existing) {
+    if (alert.status !== 'open') continue;
+    const linkedEvent = await provider.get<HealthEvent>(
+      tableNameOf('HealthEvent'),
+      alert.healthEventId,
+    );
+    if (linkedEvent?.type === event.type) openDupes.push(alert);
+  }
+
   const alerts: Alert[] = [];
   for (const link of links) {
+    const dupe = openDupes.find((a) => a.caregiverId === link.caregiverId);
+    if (dupe) {
+      // 重複事件 → 原地更新原 Alert，唔新建
+      alerts.push(
+        await provider.put<Alert>(tableNameOf('Alert'), {
+          ...dupe,
+          message,
+          severity: event.severity,
+          healthEventId: event.id,
+          updatedAt: t,
+        }),
+      );
+      continue;
+    }
     const alert: Alert = {
       id: newId(),
       elderId: event.elderId,

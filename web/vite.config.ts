@@ -8,6 +8,9 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   server: {
+    // host: true → 監聽 0.0.0.0，區網第二裝置可用 http://<LAN IP>:5173 訪問
+    // （僅影響 dev；preview / build / test 不受影響）
+    host: true,
     port: 5173,
     proxy: {
       // 所有 AI / 同步 / 即時通訊流量一律經本地 server 代理，
