@@ -1,0 +1,62 @@
+# 銀髮一句通 SilverCare Macau — GitHub Pages 部署 workflow
+#
+# ⚠️ 狀態：已準備好，但【需由用戶 push 到 GitHub 後才會生效】。
+# 本 workflow 採用官方 actions/deploy-pages 方式（push main/master 觸發）。
+# 另一條路線（推送本地 gh-pages branch）請見 scripts/deploy-pages.mjs 結尾提示，
+# 兩者擇一即可：
+#   方案 A（本 workflow）：push 主分支 → Actions 自動 build + deploy。
+#       需在 GitHub 倉庫 Settings → Pages → Source 選「GitHub Actions」。
+#   方案 B（gh-pages branch）：node scripts/deploy-pages.mjs 後
+#       git push origin gh-pages，Pages Source 選 gh-pages branch。
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web
+        run: npm run build
+        working-directory: web
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
