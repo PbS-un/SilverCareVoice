@@ -23,6 +23,7 @@ import FamilyAlerts from './pages/FamilyAlerts';
 import FamilyReport from './pages/FamilyReport';
 import InsightsPage from './pages/InsightsPage';
 import ReportPage from './pages/ReportPage';
+import PrintBrief from './pages/PrintBrief';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -120,6 +121,7 @@ export default function App() {
 
         <Route path="/insights" element={<InsightsPage />} />
         <Route path="/report" element={<ReportPage />} />
+        <Route path="/print-brief" element={<PrintBrief />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </HashRouter>
