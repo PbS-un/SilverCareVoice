@@ -77,7 +77,13 @@ describe('InsightService.getInsights — DB 聚合', () => {
     const insights = await getInsights();
     expect(insights.elderCount).toBe(0);
     expect(insights.totalRecordCount).toBe(0);
+    // 無服藥記錄時依從率必須係有限數（1），唔可以 NaN／除零
+    expect(Number.isFinite(insights.medicationAdherenceRate)).toBe(true);
     expect(insights.medicationAdherenceRate).toBe(1);
+    expect(insights.attentionEventCount).toBe(0);
+    expect(insights.urgentEventCount).toBe(0);
+    expect(insights.chronicConditionDistribution).toHaveLength(0);
+    expect(insights.symptomDistribution).toHaveLength(0);
     expect(insights.last7DayEventTrend).toHaveLength(7);
     expect(insights.last7DayEventTrend.every((d) => d.count === 0)).toBe(true);
   });

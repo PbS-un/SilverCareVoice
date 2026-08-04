@@ -104,10 +104,37 @@ describe('ReportService.getWeeklyReport — 由 DB 實際計算', () => {
     }
   });
 
-  it('冇數據嘅長者都回傳合法報告（唔報錯）', async () => {
+  it('冇數據嘅長者都回傳合法報告（唔報錯、唔除零）', async () => {
     const report = await getWeeklyReport('nonexistent-elder');
     expect(report.recordCount).toBe(0);
     expect(report.medicationAdherence.expected).toBe(0);
+    // 無排程時 rate 必須係有限數（1），絕唔可以係 NaN／Infinity
+    expect(Number.isFinite(report.medicationAdherence.rate)).toBe(true);
+    expect(report.medicationAdherence.rate).toBe(1);
+    expect(report.bpAverage).toBeUndefined();
+    expect(report.glucoseAverage).toBeUndefined();
+    expect(report.topSymptoms).toHaveLength(0);
+    expect(report.eventCount).toBe(0);
+    expect(report.aiSummary.length).toBeGreaterThan(0);
+    expect(report.aiSummary).toContain('期內無排程服藥記錄');
+  });
+
+  it('seed 長者清空晒窗口內記錄後都唔除零', async () => {
+    // 模擬「有長者但 7 日窗口內完全冇數據」：用未來嘅一筆記錄代替
+    const provider = getProvider();
+    const allVitals = await provider.list<VitalRecord>(tableNameOf('VitalRecord'), {
+      elderId: ELDER_ID,
+    });
+    // 全部移去 30 日後（窗口外）
+    for (const v of allVitals) {
+      const future = new Date(Date.now() + 30 * 86_400_000).toISOString();
+      await provider.put<VitalRecord>(tableNameOf('VitalRecord'), {
+        ...v,
+        measuredAt: future,
+      });
+    }
+    const report = await getWeeklyReport(ELDER_ID);
+    expect(Number.isFinite(report.medicationAdherence.rate)).toBe(true);
     expect(report.bpAverage).toBeUndefined();
     expect(report.aiSummary.length).toBeGreaterThan(0);
   });
