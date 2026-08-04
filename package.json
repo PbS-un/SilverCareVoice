@@ -16,12 +16,17 @@
     "preview": "npm run preview --workspace web",
     "start": "npm run start --workspace server",
     "test": "npm run test --workspace web",
-    "test:e2e": "npm run test:e2e --workspace web"
+    "test:e2e": "npm run test:e2e --workspace web",
+    "pdf": "node scripts/generate-pdf.mjs",
+    "video": "node scripts/generate-video.mjs",
+    "pages": "node scripts/deploy-pages.mjs"
   },
   "engines": {
     "node": ">=18.17"
   },
   "devDependencies": {
-    "concurrently": "^9.0.0"
+    "concurrently": "^9.0.0",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4"
   }
 }
