@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 dotenv.config({ path: fileURLToPath(new URL('./.env', import.meta.url)) })
 
 import http from 'node:http'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import express from 'express'
 import { WebSocketServer } from 'ws'
 import assistRouter from './routes/assist.mjs'
@@ -22,6 +23,32 @@ import { createSyncRouter } from './sync/routes.mjs'
 import { createHub } from './sync/hub.mjs'
 
 const PORT = Number(process.env.PORT ?? 8787)
+
+// ---- 同步配對 token（Warning 5：/sync/* 與 WS 最低限度鑑權）----
+// 來自 env SYNC_TOKEN；未設定則自動生成並打印到啟動日誌（Demo 性質：
+// 第二裝置經 URL ?syncToken=<token> 或 localStorage scv.syncToken 配對）。
+const ENV_TOKEN = (process.env.SYNC_TOKEN ?? '').trim()
+const SYNC_TOKEN = ENV_TOKEN || randomBytes(16).toString('hex')
+if (!ENV_TOKEN) {
+  console.log('[silvercare] SYNC_TOKEN 未設定，已自動生成（重啟會更換；固定請寫入 server/.env）')
+}
+
+/** 定時比較 token，避免時序側信道。 */
+function tokenMatches(candidate) {
+  if (typeof candidate !== 'string' || candidate.length === 0) return false
+  const a = Buffer.from(candidate)
+  const b = Buffer.from(SYNC_TOKEN)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/** /sync/* 鑑權：Authorization: Bearer <token> 或 ?token=<token>。 */
+function syncAuth(req, res, next) {
+  const auth = req.headers.authorization
+  const bearerOk = typeof auth === 'string' && auth.startsWith('Bearer ') && tokenMatches(auth.slice(7))
+  const queryOk = typeof req.query.token === 'string' && tokenMatches(req.query.token)
+  if (bearerOk || queryOk) return next()
+  return res.status(401).json({ ok: false, error: 'unauthorized', message: '需要 SYNC_TOKEN（Authorization: Bearer <token> 或 ?token=）' })
+}
 
 const app = express()
 
@@ -53,10 +80,10 @@ app.use('/api/ai', assistRouter)
 // ---- HTTP + WebSocket server ----
 const server = http.createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws' })
-const hub = createHub(wss)
+const hub = createHub(wss, { token: SYNC_TOKEN })
 
-// ---- 同步路由（push 成功時經 hub 廣播給其他裝置）----
-app.use('/sync', createSyncRouter(hub))
+// ---- 同步路由（先鑑權；push 成功時經 hub 廣播給其他裝置）----
+app.use('/sync', syncAuth, createSyncRouter(hub))
 
 // ---- 404 / 錯誤處理（JSON）----
 app.use((_req, res) => res.status(404).json({ ok: false, error: 'not_found' }))
@@ -68,6 +95,8 @@ app.use((err, _req, res, _next) => {
 server.listen(PORT, () => {
   console.log(`[silvercare] server listening on http://localhost:${PORT}`)
   console.log(`[silvercare] AI proxy: ${process.env.DEEPSEEK_API_KEY ? 'deepseek key loaded' : 'no DEEPSEEK_API_KEY → provider:local'}`)
+  console.log(`[silvercare] SYNC_TOKEN=${SYNC_TOKEN}`)
+  console.log('[silvercare] 第二裝置配對：瀏覽器開啟時加 ?syncToken=<上面 token>（詳見 server/README.md）')
 })
 
 // ---- 優雅關閉 ----

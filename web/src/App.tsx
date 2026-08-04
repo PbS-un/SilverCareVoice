@@ -1,7 +1,11 @@
 /**
  * App 根元件（T6）：HashRouter 路由 + 啟動流程。
  *
- * 啟動：掛載時確保 seed（DB 空 → demoReset 初始化）+ ensureKnowledgeLoaded()。
+ * 啟動（Warning 3 修復：先等同步結論再判空庫，避免 demoReset 與 sync
+ * bootstrap 競態）：掛載時 await enableSync()（探測 + bootstrap/pull 結論），
+ * 其後才做空庫判斷 —— sync 模式下資料有無已由 bootstrap 決定，
+ * 只有 standalone 且空庫才 demoReset 初始化。最後 ensureKnowledgeLoaded()。
+ * 等待期間呈現載入狀態（不閃爍）。
  * 路由：/ 角色選擇；/elder、/elder/health（老人端）；/family、/family/health、
  * /family/alerts、/family/report（家屬端）；/insights 總覽；/report 可打印報告。
  * 老人端與家屬端進入前先經 RequireConsent（免責同意）。
@@ -9,7 +13,7 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 
-import { getProvider } from './data/DataProvider';
+import { getProvider, enableSync } from './data/DataProvider';
 import { tableNameOf } from './types/entities';
 import { demoReset } from './data/demoReset';
 import { ensureKnowledgeLoaded } from './core/kb/search';
@@ -32,9 +36,14 @@ export default function App() {
     let live = true;
     (async () => {
       try {
+        // 1) 先等同步探測 + bootstrap/pull 結論（冪等；絕不 throw）——
+        //    sync 模式下資料有無由 server bootstrap 決定，杜絕空庫
+        //    demoReset 與 bootstrap 競態（Warning 3）。
+        const mode = await enableSync();
+        // 2) 其後才做空庫判斷：只有 standalone 且空庫才 demoReset。
         const provider = getProvider();
         const elders = await provider.list(tableNameOf('ElderProfile'));
-        if (elders.length === 0) await demoReset();
+        if (elders.length === 0 && mode === 'standalone') await demoReset();
         await ensureKnowledgeLoaded();
       } catch {
         /* 啟動容錯：即使載入出錯都呈現 UI，由頁面呈現空態 */

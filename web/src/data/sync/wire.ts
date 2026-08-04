@@ -17,12 +17,16 @@ export interface WireOp {
   tbl: string;
   /** 實體主鍵。 */
   entityId: string;
-  /** ISO-8601；LWW 依據。 */
+  /** ISO-8601；僅供 LWW 比較（絕不作 pull 游標——游標是 server 端 seq）。 */
   updatedAt: string;
   /** put = 寫入（帶 payload）；del = 刪除（tombstone）。 */
   type: 'put' | 'del';
   /** 完整實體 JSON（put 時必帶）。 */
   payload?: Record<string, unknown>;
+  /** 來源裝置（pull / bootstrap 回傳；LWW 平手 tiebreaker 用）。 */
+  deviceId?: string;
+  /** server 端單調序號（pull 回傳；即游標语义）。 */
+  seq?: number;
 }
 
 /** bootstrap 回傳的一筆當前狀態（含 tombstone）。 */
@@ -32,6 +36,19 @@ export interface BootstrapEntity {
   updatedAt: string;
   payload: Record<string, unknown>;
   deleted: boolean;
+  /** 最後寫入裝置（LWW 平手 tiebreaker 用）。 */
+  deviceId?: string;
+}
+
+/** push 回應（server 對每筆 op 的應用結果）。 */
+export interface PushResult {
+  /** 覆蓋當前狀態的 op id。 */
+  applied?: string[];
+  /** 記入 ops 日誌但被 LWW 拒絕的 op id（server 已收妥，可出隊但需 warn）。 */
+  rejected?: string[];
+  /** 重複推送（日誌已有）的 op id。 */
+  duplicated?: string[];
+  serverTime?: string;
 }
 
 /** 本地 Dexie 表名 → 線協議實體名。 */
@@ -50,7 +67,37 @@ export function tableOfEntity(tbl: string): TableName | undefined {
 
 /** localStorage 鍵名。 */
 export const LS_DEVICE_ID = 'scv.deviceId';
+/** pull 游標：server 端單調 seq（數字字串，非時間）。 */
 export const LS_SYNC_CURSOR = 'scv.syncCursor';
+/** 同步配對 token（server SYNC_TOKEN）。 */
+export const LS_SYNC_TOKEN = 'scv.syncToken';
+
+/**
+ * 取得同步配對 token：localStorage 優先；首次配對可由 URL `?syncToken=<token>`
+ * 帶入（自動持久化，第二裝置只需帶一次）。無 token 回傳空字串。
+ */
+export function getSyncToken(storage: Storage = localStorage): string {
+  try {
+    const existing = storage.getItem(LS_SYNC_TOKEN);
+    if (existing) return existing;
+    if (typeof location !== 'undefined' && location.search) {
+      const fromUrl = new URLSearchParams(location.search).get('syncToken');
+      if (fromUrl) {
+        storage.setItem(LS_SYNC_TOKEN, fromUrl);
+        return fromUrl;
+      }
+    }
+  } catch {
+    // ignore（無 localStorage 環境）
+  }
+  return '';
+}
+
+/** /sync/* 請求的鑑權標頭（無 token 時為空物件——server 將回 401）。 */
+export function authHeaders(): Record<string, string> {
+  const token = getSyncToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 /** 產生操作 ID（uuid；舊環境降級為隨機字串）。 */
 export function newId(): string {

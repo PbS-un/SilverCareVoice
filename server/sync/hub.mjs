@@ -2,16 +2,28 @@
  * 銀髮一句通 SilverCare Macau — WebSocket 同步中樞
  *
  * 協定（路徑 /ws）：
- *  客戶端 → { type:'hello', deviceId }          註冊裝置
+ *  客戶端 → { type:'hello', deviceId, token }    註冊裝置（token = SYNC_TOKEN；
+ *          亦接受 upgrade URL ?token=<token>）。驗證失敗 → auth_error 並斷線，
+ *          未註冊 socket 永不收到 change 廣播。
  *  伺服器 → { type:'hello_ok', deviceId, serverTime }
+ *  伺服器 → { type:'auth_error', message }（token 缺失／錯誤）
  *  客戶端 → { type:'ping' }                     伺服器回 { type:'pong', serverTime }
  *  伺服器 → { type:'change', ops, originDeviceId }  其他裝置 push 成功後的廣播（排除來源裝置）
  *
  * 心跳：server 每 30s ping，無 pong 即 terminate。
  */
 import { WebSocket } from 'ws'
+import { timingSafeEqual } from 'node:crypto'
 
-export function createHub(wss, { heartbeatMs = 30_000 } = {}) {
+/** 定時比較，避免 token 時序側信道。 */
+function tokenMatches(candidate, expected) {
+  if (typeof candidate !== 'string' || candidate.length === 0) return false
+  const a = Buffer.from(candidate)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+export function createHub(wss, { heartbeatMs = 30_000, token = '' } = {}) {
   /** deviceId → Set<WebSocket> */
   const byDevice = new Map()
   /** WebSocket → deviceId */
@@ -43,8 +55,18 @@ export function createHub(wss, { heartbeatMs = 30_000 } = {}) {
     deviceOf.delete(ws)
   }
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
     ws.isAlive = true
+    // upgrade URL ?token= 預先過關（hello 內 token 亦可）
+    let urlTokenOk = false
+    try {
+      const url = new URL(req?.url ?? '', 'http://localhost')
+      urlTokenOk = tokenMatches(url.searchParams.get('token') ?? '', token)
+    } catch {
+      urlTokenOk = false
+    }
+    ws.authOk = urlTokenOk
+
     ws.on('pong', () => {
       ws.isAlive = true
     })
@@ -58,9 +80,15 @@ export function createHub(wss, { heartbeatMs = 30_000 } = {}) {
         return
       }
       if (msg?.type === 'hello' && typeof msg.deviceId === 'string' && msg.deviceId.trim()) {
+        if (!ws.authOk && !tokenMatches(msg.token, token)) {
+          send(ws, { type: 'auth_error', message: 'invalid_or_missing_token' })
+          ws.close()
+          return
+        }
+        ws.authOk = true
         register(ws, msg.deviceId.trim())
         send(ws, { type: 'hello_ok', deviceId: msg.deviceId.trim(), serverTime: new Date().toISOString() })
-      } else if (msg?.type === 'ping') {
+      } else if (msg?.type === 'ping' && ws.authOk) {
         send(ws, { type: 'pong', serverTime: new Date().toISOString() })
       }
     })

@@ -16,7 +16,7 @@ import { TABLE_NAME_LIST, type BaseEntity, type TableName, type VitalRecord, typ
 import { IndexedDBProvider } from '../IndexedDBProvider';
 import type { BulkEntry, DataProvider, ListFilter, SeedData, SubscribeCallback, Unsubscribe } from '../DataProvider';
 import { SyncClient } from './SyncClient';
-import { TABLE_TO_ENTITY, newId, probeServer, getOrCreateDeviceId, type WireOp } from './wire';
+import { TABLE_TO_ENTITY, authHeaders, newId, probeServer, getOrCreateDeviceId, type PushResult, type WireOp } from './wire';
 
 function isoNow(): string {
   return new Date().toISOString();
@@ -29,12 +29,24 @@ interface OutboxRow {
   op: WireOp;
 }
 
+interface DeadRow {
+  seq?: number;
+  op: WireOp;
+  /** 隔離時間（ISO）。 */
+  at: string;
+  /** 永久失敗的 HTTP 狀態碼。 */
+  status: number;
+}
+
 class OutboxDB extends Dexie {
   outbox!: Table<OutboxRow, number>;
+  /** 4xx 永久失敗隔離區（dead-letter；避免毒批次無限重試）。 */
+  dead!: Table<DeadRow, number>;
 
   constructor(dbName: string) {
     super(dbName);
     this.version(1).stores({ outbox: '++seq' });
+    this.version(2).stores({ outbox: '++seq', dead: '++seq' });
   }
 }
 
@@ -81,6 +93,11 @@ export class Outbox {
     return this.db.outbox.count();
   }
 
+  /** 4xx 永久失敗被隔離的筆數（dead-letter；診斷用）。 */
+  async deadCount(): Promise<number> {
+    return this.db.dead.count();
+  }
+
   /** 排程一次 flush（已有排程則不重複）。 */
   scheduleFlush(delayMs = this.debounceMs): void {
     if (this.timer !== null) return;
@@ -90,7 +107,15 @@ export class Outbox {
     }, delayMs);
   }
 
-  /** 批量推送；成功出隊並續推，失敗保留並退避重試。 */
+  /**
+   * 批量推送與出隊規則（Warning 4 修復）：
+   *  - HTTP 2xx：server 已收妥整批 → 全部出隊；回應中的 rejected op id
+   *    （LWW 被較新寫入拒絕）console.warn 記錄 —— 絕不把 applied:0 當成功丟失，
+   *    也絕不讓被拒 op 卡住隊列。
+   *  - HTTP 4xx（408/429 除外）：永久失敗 → 該批寫入獨立 dead-letter store 隔離，
+   *    避免毒批次無限重試；console.error 記錄。
+   *  - HTTP 5xx／網路錯誤：暫時性 → 保留隊列，指數退避（1s → 30s 封頂）重試。
+   */
   async flush(): Promise<void> {
     if (this.pushing) return;
     this.pushing = true;
@@ -101,26 +126,57 @@ export class Outbox {
           this.retryDelay = 0;
           return;
         }
+        let res: Response;
         try {
-          const res = await this.fetchImpl('/sync/push', {
+          res = await this.fetchImpl('/sync/push', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify({ deviceId: this.deviceId, ops: rows.map((r) => r.op) }),
           });
-          if (!res.ok) throw new Error(`push failed: HTTP ${res.status}`);
+        } catch {
+          // 網路失敗／server 暫不可達：保留隊列，指數退避重試
+          this.backoffAndReturn();
+          return;
+        }
+        if (res.ok) {
+          let body: PushResult = {};
+          try {
+            body = (await res.json()) as PushResult;
+          } catch {
+            // 回應體解析失敗不影響出隊（HTTP 2xx 即 server 已收妥）
+          }
+          if (Array.isArray(body.rejected) && body.rejected.length > 0) {
+            console.warn(
+              `[sync] server 以 LWW 拒絕 ${body.rejected.length} 筆 op（已被更新的寫入覆蓋；op 仍記入 server 日誌）：`,
+              body.rejected,
+            );
+          }
           await this.db.outbox.bulkDelete(rows.map((r) => r.seq as number));
           this.retryDelay = 0;
           // 續推剩餘（while 迴圈下一輪）
-        } catch {
-          // 網路失敗／server 暫不可達：保留隊列，指數退避重試
-          this.retryDelay = this.retryDelay === 0 ? 1000 : Math.min(30_000, this.retryDelay * 2);
-          this.scheduleFlush(this.retryDelay);
-          return;
+          continue;
         }
+        if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+          // 永久失敗（驗證／鑑權等）：隔離該批，不重試
+          console.error(`[sync] push 永久失敗（HTTP ${res.status}）：隔離 ${rows.length} 筆 op 至 dead-letter，不再重試`);
+          const at = isoNow();
+          await this.db.dead.bulkAdd(rows.map((r) => ({ op: r.op, at, status: res.status })));
+          await this.db.outbox.bulkDelete(rows.map((r) => r.seq as number));
+          this.retryDelay = 0;
+          continue;
+        }
+        // 5xx／408／429：暫時性失敗，退避重試
+        this.backoffAndReturn();
+        return;
       }
     } finally {
       this.pushing = false;
     }
+  }
+
+  private backoffAndReturn(): void {
+    this.retryDelay = this.retryDelay === 0 ? 1000 : Math.min(30_000, this.retryDelay * 2);
+    this.scheduleFlush(this.retryDelay);
   }
 
   /** 關閉（清排程；測試／卸載用）。 */
@@ -147,14 +203,29 @@ function makePutOp(table: TableName, entity: BaseEntity): WireOp {
 }
 
 /** 本地刪除 → 線協議 del op（tombstone）。 */
-function makeDelOp(table: TableName, entityId: string): WireOp {
+function makeDelOp(table: TableName, entityId: string, updatedAt = isoNow()): WireOp {
   return {
     id: newId(),
     tbl: TABLE_TO_ENTITY[table],
     entityId,
-    updatedAt: isoNow(),
+    updatedAt,
     type: 'del',
   };
+}
+
+/**
+ * Demo 重置的 seed 重蓋章（Critical 2 修復）：seed 實體原帶過去時間戳，
+ * 直接 push 會被 LWW 拒絕（且 tombstone > seed put 會把第二裝置清空、
+ * 永久分叉）。這裡對每筆 seed 重新蓋 `updatedAt = 現在`（嚴格晚於同次
+ * reset 產生的全部 tombstone），保證 tombstone < seed put，server 與兩端
+ * 一致收斂。createdAt 保留原值。
+ */
+function restampSeed(seed: SeedData, updatedAt: string): SeedData {
+  const out = {} as SeedData;
+  for (const key of Object.keys(seed) as (keyof SeedData)[]) {
+    out[key] = (seed[key] as BaseEntity[]).map((e) => ({ ...e, updatedAt })) as never;
+  }
+  return out;
 }
 
 export type SyncMode = 'sync' | 'standalone';
@@ -235,6 +306,11 @@ export class SyncedProvider implements DataProvider {
     return this.outbox ? this.outbox.flush() : Promise.resolve();
   }
 
+  /** 4xx 永久失敗被隔離（dead-letter）的 op 筆數（診斷／測試用）。 */
+  deadOps(): Promise<number> {
+    return this.outbox ? this.outbox.deadCount() : Promise.resolve(0);
+  }
+
   /* ── 讀取：直接委派 ── */
 
   list<T extends BaseEntity>(table: TableName, filter?: ListFilter<T>): Promise<T[]> {
@@ -297,6 +373,11 @@ export class SyncedProvider implements DataProvider {
   /**
    * 重置：本地清空（＋seed），同步模式下同時對舊資料發 del、對 seed 發 put，
    * 使兩裝置收斂（與 demoReset 同一 code path）。
+   *
+   * Critical 2 修復：sync 模式下 seed 實體一律重新蓋章 `updatedAt = 現在`
+   * （嚴格晚於同次 reset 的 tombstone），避免 seed 帶過去時間戳被 LWW 拒絕、
+   * 造成第二裝置被 tombstone 清空而永久分叉。createdAt 保留原值。
+   * 注意：demo reset 不清空 outbox（既有待推 op 照推；LWW 下無害）。
    */
   async reset(seed?: SeedData): Promise<void> {
     if (this.outbox) {
@@ -306,9 +387,11 @@ export class SyncedProvider implements DataProvider {
         for (const r of rows) await this.enqueueSafe(makeDelOp(t, r.id));
       }
     }
-    await this.inner.reset(seed);
+    // seed 重蓋章：嚴格晚於上面所有 tombstone（+1ms 保證同毫秒也不平手）
+    const effectiveSeed = this.outbox && seed ? restampSeed(seed, new Date(Date.now() + 1).toISOString()) : seed;
+    await this.inner.reset(effectiveSeed);
     if (this.outbox && seed) {
-      // reset 後重新讀取（inner 已蓋章時間戳），對 seed 結果產生 put op
+      // reset 後重新讀取（inner 保留重蓋章的 updatedAt），對 seed 結果產生 put op
       for (const t of TABLE_NAME_LIST) {
         const rows = await this.inner.list(t);
         for (const r of rows) await this.enqueueSafe(makePutOp(t, r));

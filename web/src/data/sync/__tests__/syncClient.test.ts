@@ -2,6 +2,8 @@
  * T8 Sync 客戶端單測：
  *  - 探測失敗降級 standalone
  *  - bootstrap apply 採 LWW（較新覆蓋、較舊保留、tombstone 刪除）
+ *  - cursor 語義：server 端 seq 數字字串（非時間）；舊 ISO 游標自動丟棄改 bootstrap
+ *  - LWW 平手確定性 tiebreaker（updatedAt 相同 → deviceId 字典序大者勝）
  *  - WS change ops apply 到本地並觸發 subscribe
  */
 import 'fake-indexeddb/auto';
@@ -105,6 +107,7 @@ describe('SyncClient / SyncedProvider', () => {
       if (url.startsWith('/sync/bootstrap')) {
         return okJson({
           serverTime: '2026-08-05T00:00:00.000Z',
+          cursor: '7',
           entities: [
             {
               // 本地較新 → 不得覆蓋
@@ -160,9 +163,9 @@ describe('SyncClient / SyncedProvider', () => {
         });
       }
       if (url.startsWith('/sync/pull')) {
-        return okJson({ ops: [], cursor: '2026-08-05T00:00:00.000Z', serverTime: '2026-08-05T00:00:00.000Z' });
+        return okJson({ ops: [], cursor: '8', serverTime: '2026-08-05T00:00:00.000Z' });
       }
-      return okJson({ applied: 0, serverTime: '2026-08-05T00:00:00.000Z' });
+      return okJson({ applied: [], rejected: [], duplicated: [], serverTime: '2026-08-05T00:00:00.000Z' });
     });
 
     const inner = new IndexedDBProvider(`sc-sync-test-${dbSeq}`);
@@ -199,8 +202,8 @@ describe('SyncClient / SyncedProvider', () => {
     expect(await provider.get('vitalRecords', 'to-delete')).toBeUndefined(); // tombstone
     expect((await provider.get<VitalRecord>('vitalRecords', 'new-remote'))?.value).toBe(60); // 匯入
 
-    // cursor 持久化
-    expect(localStorage.getItem(LS_SYNC_CURSOR)).toBe('2026-08-05T00:00:00.000Z');
+    // cursor 持久化（server 端 seq 數字字串，非時間）
+    expect(localStorage.getItem(LS_SYNC_CURSOR)).toBe('7');
   });
 
   it('WS change ops apply 到本地並觸發 subscribe 通知', async () => {
