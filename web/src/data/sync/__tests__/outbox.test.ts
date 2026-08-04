@@ -9,6 +9,9 @@ import { IndexedDBProvider } from '../../IndexedDBProvider';
 import { SyncedProvider } from '../outbox';
 import type { VitalRecord } from '../../../types/entities';
 
+/** 運行時（vitest/Node 環境）存在 setImmediate，此處只補型別宣告。 */
+declare const setImmediate: (callback: (...args: unknown[]) => void) => unknown;
+
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
   readyState = 0;

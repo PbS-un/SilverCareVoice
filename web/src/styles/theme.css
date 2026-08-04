@@ -34,6 +34,8 @@
   /* ---- 字體堆疊：繁中端正字 ---- */
   --sc-font-sans: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei',
     system-ui, -apple-system, sans-serif;
+  /* 標題／品牌：楷宋感襯線，帶出報刊式溫暖 */
+  --sc-font-serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
 
   /* ---- 觸控與圓角 ---- */
   --sc-tap-target: 3.5rem;     /* ≥56px 觸控目標 */
@@ -156,6 +158,65 @@
   .status-thinking { background-color: var(--sc-thinking); }
   .status-ok { background-color: var(--sc-ok); }
   .status-urgent { background-color: var(--sc-urgent); }
+
+  /* ---- 品牌襯線標題 ---- */
+  .font-serif-display {
+    font-family: var(--sc-font-serif);
+    letter-spacing: 0.02em;
+  }
+
+  /* ---- 紙感背景：米白 + 極淡網點紋理 ---- */
+  .bg-paper-grain {
+    background-color: var(--sc-paper);
+    background-image: radial-gradient(rgb(31 41 55 / 0.035) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  /* ---- 次要按鈕（描邊款） ---- */
+  .btn-ghost {
+    background-color: transparent;
+    color: var(--sc-ink);
+    border: 2px solid var(--sc-line);
+  }
+  .btn-ghost:hover {
+    border-color: var(--sc-idle);
+    color: var(--sc-idle-deep);
+  }
+  .btn-ok {
+    background-color: var(--sc-ok);
+    color: #fff;
+  }
+
+  /* ---- 打印報告頁 ---- */
+  .report-h2 {
+    font-family: var(--sc-font-serif);
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    border-left: 0.375rem solid var(--sc-idle);
+    padding-left: 0.75rem;
+    break-after: avoid;
+  }
+  .report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 1.125rem;
+  }
+  .report-table th,
+  .report-table td {
+    border: 1px solid var(--sc-line);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .report-table th {
+    background-color: var(--sc-idle-soft);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .report-table tr {
+    break-inside: avoid;
+  }
 }
 
 @layer utilities {
