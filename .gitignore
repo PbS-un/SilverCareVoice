@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Env / secrets — 密鑰永不進 git
+.env
+.env.*
+!.env.example
+
+# SQLite databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Playwright artifacts
+playwright-report/
+test-results/
+playwright/.cache/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
