@@ -9,10 +9,11 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
-import { bypassConsent, askElder } from './helpers';
+import { bypassConsent, login, askElder } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await bypassConsent(page);
+  await login(page);
 });
 
 async function gotoElder(page: Page): Promise<void> {

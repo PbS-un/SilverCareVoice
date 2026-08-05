@@ -1,10 +1,20 @@
 /**
  * T10 E2E 共用工具：
+ * - login：經真實 UI 完成 Demo Login（tester / tester）→ 角色選擇
  * - bypassConsent：用 localStorage 標記略過同意畫面（等同用戶已同意）
  * - demoResetViaUI：經真實 UI 執行 Demo 重置
  * - askElder：文字輸入 → 發送 → 等待回答氣泡
  */
 import { expect, type Page } from '@playwright/test';
+
+/** 經真實 UI 執行 Demo Login（tester / tester）→ 等到角色選擇頁。 */
+export async function login(page: Page): Promise<void> {
+  await page.goto('/');
+  await page.getByTestId('demo-login-id').fill('tester');
+  await page.getByTestId('demo-login-password').fill('tester');
+  await page.getByTestId('demo-login-submit').click();
+  await expect(page.getByTestId('role-elder')).toBeVisible({ timeout: 30_000 });
+}
 
 /** 略過 ConsentScreen（localStorage 標記，與產品邏輯一致）。 */
 export async function bypassConsent(page: Page): Promise<void> {
@@ -15,6 +25,7 @@ export async function bypassConsent(page: Page): Promise<void> {
 
 /** 經角色選擇頁真實 UI 執行 Demo 重置。 */
 export async function demoResetViaUI(page: Page): Promise<void> {
+  await login(page);
   await page.goto('/');
   await page.getByTestId('demo-reset').click();
   await page.getByTestId('demo-reset-confirm').click();

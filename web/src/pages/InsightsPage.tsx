@@ -18,15 +18,16 @@ import {
 
 import { getInsights } from '../services/InsightService';
 import { useAsyncData, useDbVersion } from '../lib/hooks';
-import { CONDITION_LABELS } from '../lib/format';
+import { useI18n } from '../i18n';
 import SyncBadge from '../components/SyncBadge';
 
 export default function InsightsPage() {
+  const { t } = useI18n();
   const dbVersion = useDbVersion();
   const { data: ins } = useAsyncData(() => getInsights(), [dbVersion]);
 
   const conditionData = (ins?.chronicConditionDistribution ?? []).map((c) => ({
-    name: CONDITION_LABELS[c.type] ?? c.type,
+    name: t(`condition.${c.type}`),
     count: c.count,
   }));
   const symptomData = (ins?.symptomDistribution ?? []).slice(0, 8).map((s) => ({
@@ -43,52 +44,54 @@ export default function InsightsPage() {
       <header className="mb-5 flex items-start justify-between">
         <div>
           <p className="text-sm font-medium tracking-widest text-[var(--sc-muted)]">INSIGHTS</p>
-          <h1 className="font-serif-display text-elder-display text-ink">數據洞察</h1>
+          <h1 className="font-serif-display text-elder-display text-ink">{t('insights.title')}</h1>
         </div>
         <SyncBadge />
       </header>
 
       {!ins ? (
         <p className="text-xl text-[var(--sc-ink-soft)]" role="status">
-          統計緊……
+          {t('insights.loading')}
         </p>
       ) : (
         <div className="flex flex-col gap-4" data-testid="insights-dashboard">
           {/* 關鍵數字 */}
           <div className="grid grid-cols-2 gap-4">
-            <section className="card-elder" aria-label="長者數">
-              <h2 className="text-lg font-bold text-[var(--sc-ink-soft)]">長者</h2>
+            <section className="card-elder" aria-label={t('insights.elders')}>
+              <h2 className="text-lg font-bold text-[var(--sc-ink-soft)]">{t('insights.elders')}</h2>
               <p className="font-serif-display text-4xl font-black">{ins.elderCount}</p>
-              <p className="text-lg text-[var(--sc-ink-soft)]">位</p>
+              <p className="text-lg text-[var(--sc-ink-soft)]">{t('insights.eldersUnit')}</p>
             </section>
-            <section className="card-elder" aria-label="紀錄總數">
-              <h2 className="text-lg font-bold text-[var(--sc-ink-soft)]">健康記錄</h2>
+            <section className="card-elder" aria-label={t('insights.records')}>
+              <h2 className="text-lg font-bold text-[var(--sc-ink-soft)]">{t('insights.records')}</h2>
               <p className="font-serif-display text-4xl font-black">{ins.totalRecordCount}</p>
-              <p className="text-lg text-[var(--sc-ink-soft)]">項</p>
+              <p className="text-lg text-[var(--sc-ink-soft)]">{t('insights.recordsUnit')}</p>
             </section>
-            <section className="card-elder" aria-label="服藥依從率">
-              <h2 className="text-lg font-bold text-[var(--sc-ink-soft)]">服藥依從率</h2>
+            <section className="card-elder" aria-label={t('insights.adherence')}>
+              <h2 className="text-lg font-bold text-[var(--sc-ink-soft)]">{t('insights.adherence')}</h2>
               <p className="font-serif-display text-4xl font-black text-[var(--sc-idle-deep)]">
                 {Math.round(ins.medicationAdherenceRate * 100)}%
               </p>
-              <p className="text-lg text-[var(--sc-ink-soft)]">整體</p>
+              <p className="text-lg text-[var(--sc-ink-soft)]">{t('insights.adherenceUnit')}</p>
             </section>
-            <section className="card-elder" aria-label="事件數">
-              <h2 className="text-lg font-bold text-[var(--sc-ink-soft)]">事件</h2>
+            <section className="card-elder" aria-label={t('insights.events')}>
+              <h2 className="text-lg font-bold text-[var(--sc-ink-soft)]">{t('insights.events')}</h2>
               <p className="text-elder-body font-bold">
-                <span className="text-[var(--sc-thinking)]">{ins.attentionEventCount} 留意</span>
+                <span className="text-[var(--sc-thinking)]">
+                  {t('insights.attention', { n: ins.attentionEventCount })}
+                </span>
               </p>
               <p className="text-elder-body font-bold">
-                <span className="text-[var(--sc-urgent)]">{ins.urgentEventCount} 緊急</span>
+                <span className="text-[var(--sc-urgent)]">{t('insights.urgent', { n: ins.urgentEventCount })}</span>
               </p>
             </section>
           </div>
 
           {/* 慢病分佈 */}
-          <section className="card-elder" aria-label="慢病分佈">
-            <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">慢病分佈</h2>
+          <section className="card-elder" aria-label={t('insights.conditions')}>
+            <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">{t('insights.conditions')}</h2>
             {conditionData.length === 0 ? (
-              <p className="text-xl text-[var(--sc-muted)]">冇數據</p>
+              <p className="text-xl text-[var(--sc-muted)]">{t('insights.noData')}</p>
             ) : (
               <div data-testid="condition-chart" className="h-44 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -97,7 +100,7 @@ export default function InsightsPage() {
                     <XAxis dataKey="name" tick={{ fontSize: 13 }} interval={0} />
                     <YAxis tick={{ fontSize: 13 }} allowDecimals={false} />
                     <Tooltip />
-                    <Bar dataKey="count" name="人數" fill="var(--sc-idle)" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="count" name={t('insights.people')} fill="var(--sc-idle)" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -105,10 +108,10 @@ export default function InsightsPage() {
           </section>
 
           {/* 症狀分佈 */}
-          <section className="card-elder" aria-label="症狀分佈">
-            <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">症狀分佈</h2>
+          <section className="card-elder" aria-label={t('insights.symptoms')}>
+            <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">{t('insights.symptoms')}</h2>
             {symptomData.length === 0 ? (
-              <p className="text-xl text-[var(--sc-muted)]">冇數據</p>
+              <p className="text-xl text-[var(--sc-muted)]">{t('insights.noData')}</p>
             ) : (
               <div data-testid="symptom-chart" className="h-52 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -121,7 +124,7 @@ export default function InsightsPage() {
                     <XAxis type="number" tick={{ fontSize: 13 }} allowDecimals={false} />
                     <YAxis type="category" dataKey="name" width={64} tick={{ fontSize: 13 }} />
                     <Tooltip />
-                    <Bar dataKey="count" name="次數" fill="var(--sc-thinking)" radius={[0, 6, 6, 0]} />
+                    <Bar dataKey="count" name={t('insights.times')} fill="var(--sc-thinking)" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -129,8 +132,8 @@ export default function InsightsPage() {
           </section>
 
           {/* 7 日事件趨勢 */}
-          <section className="card-elder" aria-label="七日事件趨勢">
-            <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">近 7 日事件趨勢</h2>
+          <section className="card-elder" aria-label={t('insights.trend')}>
+            <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">{t('insights.trend')}</h2>
             <div data-testid="trend-chart" className="h-44 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trendData} margin={{ top: 8, right: 8, bottom: 0, left: -28 }}>
@@ -141,7 +144,7 @@ export default function InsightsPage() {
                   <Line
                     type="monotone"
                     dataKey="count"
-                    name="事件"
+                    name={t('insights.event')}
                     stroke="var(--sc-listening)"
                     strokeWidth={3}
                     dot={{ r: 3 }}
@@ -153,10 +156,10 @@ export default function InsightsPage() {
 
           <div className="mt-2 flex justify-center gap-6 text-xl font-bold">
             <Link to="/report" className="text-[var(--sc-idle-deep)] underline underline-offset-4">
-              總報告
+              {t('insights.report')}
             </Link>
             <Link to="/" className="text-[var(--sc-ink-soft)] underline underline-offset-4">
-              返回角色選擇
+              {t('insights.back')}
             </Link>
           </div>
         </div>

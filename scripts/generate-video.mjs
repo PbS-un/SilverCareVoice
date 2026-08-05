@@ -3,7 +3,8 @@
  *
  * 用 Playwright(chromium) 的 context recordVideo 錄製 deliverables/demo.webm。
  * 內容為「真實操作、不剪接」的完整閉環：
- *   Demo Reset → 同意頁 → /elder 輸入「我啱啱血壓158/95，仲有啲頭暈」
+ *   Demo Login（tester/tester）→ 四語言展示 → Demo Reset → 同意頁
+ *   → /elder 輸入「我啱啱血壓158/95，仲有啲頭暈」
  *   → 回答氣泡與今日狀態 → /family/health 圖表新點 → /family/alerts 新提醒
  *   → 已跟進 → 回 /elder 見「家人已經知道 ✓」
  *
@@ -50,24 +51,44 @@ async function main() {
     const page = await ctx.newPage();
     const recStart = Date.now(); // 錄製長度以 context 建立後起算
 
-    /* 1) 開場：角色選擇頁 */
+    /* 1) 開場：Demo Login（品牌頁） */
     await page.goto(`${BASE}/`);
-    await page.getByTestId('role-elder').waitFor({ state: 'visible', timeout: 30_000 });
+    await page.getByTestId('demo-login-form').waitFor({ state: 'visible', timeout: 30_000 });
     await sleep(3_000);
 
-    /* 2) Demo Reset */
+    /* 2) Demo Login：tester / tester */
+    await page.getByTestId('demo-login-id').click();
+    await page.getByTestId('demo-login-id').pressSequentially('tester', { delay: 90 });
+    await page.getByTestId('demo-login-password').click();
+    await page.getByTestId('demo-login-password').pressSequentially('tester', { delay: 90 });
+    await sleep(800);
+    await page.getByTestId('demo-login-submit').click();
+    await page.getByTestId('role-elder').waitFor({ state: 'visible', timeout: 30_000 });
+    await sleep(1_500);
+
+    /* 3) 四語言切換展示（最後回繁體中文） */
+    await page.getByTestId('lang-en').click();
+    await sleep(900);
+    await page.getByTestId('lang-pt').click();
+    await sleep(900);
+    await page.getByTestId('lang-zh-CN').click();
+    await sleep(900);
+    await page.getByTestId('lang-zh-HK').click();
+    await sleep(1_200);
+
+    /* 4) Demo Reset */
     await page.getByTestId('demo-reset').click();
     await sleep(1_200);
     await page.getByTestId('demo-reset-confirm').click();
     await page.getByText('已重置為示範資料').waitFor({ timeout: 30_000 });
     await sleep(2_500);
 
-    /* 3) 進入長者端 → 同意頁 */
+    /* 5) 進入長者端 → 同意頁 */
     await page.getByTestId('role-elder').click();
     await agreeConsentIfShown(page);
     await sleep(1_500);
 
-    /* 4) 一句輸入 → 回答 */
+    /* 6) 一句輸入 → 回答（完成後自動朗讀一次） */
     await page.getByTestId('text-input').click();
     await page.getByTestId('text-input').pressSequentially('我啱啱血壓158/95，仲有啲頭暈', { delay: 110 });
     await sleep(900);
@@ -76,11 +97,11 @@ async function main() {
     await page.getByTestId('answer-bubble').scrollIntoViewIfNeeded();
     await sleep(5_000); // 讓觀眾閱讀回答
 
-    /* 5) 今日狀態 */
+    /* 7) 今日狀態 */
     await page.getByTestId('today-status').scrollIntoViewIfNeeded();
     await sleep(3_000);
 
-    /* 6) 快捷「量血壓」→ 實際新增一筆（圖表新點的來源） */
+    /* 8) 快捷「量血壓」→ 實際新增一筆（圖表新點的來源） */
     await page.getByTestId('quick-bp').click();
     await sleep(1_000);
     await page.getByTestId('bp-systolic-input').fill('162');
@@ -90,7 +111,7 @@ async function main() {
     await page.getByText('已經通知家人').first().waitFor({ timeout: 15_000 }).catch(() => undefined);
     await sleep(3_000);
 
-    /* 7) 家屬端：健康趨勢（圖表出現新點） */
+    /* 9) 家屬端：健康趨勢（圖表出現新點） */
     await page.goto(`${BASE}/#/family/health`);
     await agreeConsentIfShown(page);
     await page
@@ -99,12 +120,12 @@ async function main() {
     await page.locator('section', { has: page.getByTestId('bp-chart') }).scrollIntoViewIfNeeded();
     await sleep(5_000);
 
-    /* 8) 家屬端：提醒列表（新 Alert） */
+    /* 10) 家屬端：提醒列表（新 Alert） */
     await page.goto(`${BASE}/#/family/alerts`);
     await page.getByTestId('family-alert-item').first().waitFor({ state: 'visible', timeout: 15_000 });
     await sleep(3_500);
 
-    /* 9) 已跟進 */
+    /* 11) 已跟進 */
     await page.getByTestId('followup-button').first().click();
     await sleep(1_200);
     await page.getByTestId('followup-type-visit').click();
@@ -115,7 +136,7 @@ async function main() {
     await page.getByText('已記低跟進').waitFor({ timeout: 15_000 });
     await sleep(3_000);
 
-    /* 10) 回長者端：家人已經知道 ✓ */
+    /* 12) 回長者端：家人已經知道 ✓ */
     await page.goto(`${BASE}/#/elder`);
     await page.getByTestId('today-status').waitFor({ state: 'visible', timeout: 20_000 });
     await page.getByTestId('today-status').scrollIntoViewIfNeeded();

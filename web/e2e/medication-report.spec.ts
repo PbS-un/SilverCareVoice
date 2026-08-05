@@ -7,11 +7,12 @@
  */
 import { test, expect } from '@playwright/test';
 
-import { bypassConsent, askElder, readAdherenceTaken } from './helpers';
+import { bypassConsent, login, askElder, readAdherenceTaken } from './helpers';
 
 test('服藥記錄：老人端操作 → 家屬端狀態 + 週報依從率變化', async ({ page }) => {
   test.setTimeout(120_000);
   await bypassConsent(page);
+  await login(page);
 
   // 0) 初始週報已服次數（DB 實算）
   const takenBefore = await readAdherenceTaken(page);
@@ -61,5 +62,12 @@ test('服藥記錄：老人端操作 → 家屬端狀態 + 週報依從率變化
 
   // 4) 週報已服次數 = 初始 + 1（漏服→已服淨變化為 0，新藥 +1）
   const takenAfter = await readAdherenceTaken(page);
-  expect(takenAfter).toBe(takenBefore + 1);
+  // 時段修正：seed 今日 08:00 已服 log 只有喺 08:00 之後先落入 7 日窗口。
+  //  - 08:00 前：漏服→已服翻轉會新建立一筆 taken（淨 +1），再加新藥 +1 → +2
+  //  - 08:00 後：翻轉係既有 taken→missed→taken（淨 0），新藥 +1 → +1
+  const today8 = new Date();
+  today8.setHours(8, 0, 0, 0);
+  const flipDelta = Date.now() >= today8.getTime() ? 0 : 1;
+  expect(takenAfter).toBe(takenBefore + 1 + flipDelta);
+  expect(takenAfter).toBeGreaterThan(takenBefore);
 });

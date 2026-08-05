@@ -10,7 +10,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
-import { bypassConsent, askElder } from './helpers';
+import { bypassConsent, login, askElder } from './helpers';
 
 /** 與 seed.ts 相同口徑：N 日前本地時間 08:10。 */
 function seedTime(daysAgo: number): number {
@@ -22,6 +22,7 @@ function seedTime(daysAgo: number): number {
 
 test.beforeEach(async ({ page }) => {
   await bypassConsent(page);
+  await login(page);
 });
 
 async function gotoElder(page: Page): Promise<void> {
@@ -146,10 +147,34 @@ test('場景10：無 Web Speech API 時麥克風隱藏、文字輸入照常', as
   // 確保語音 API 不存在（Chromium headless 本來就冇，雙重保險）
   await page.addInitScript(() => {
     const w = window as unknown as Record<string, unknown>;
-    delete w.SpeechRecognition;
-    delete w.webkitSpeechRecognition;
+    // headless Chromium 部分版本嘅 API 係 non-configurable accessor，
+    // delete 未必生效 → 用 defineProperty 落 own property 確保隱藏
+    try {
+      delete w.SpeechRecognition;
+    } catch {
+      /* ignore */
+    }
+    try {
+      delete w.webkitSpeechRecognition;
+    } catch {
+      /* ignore */
+    }
+    try {
+      Object.defineProperty(w, 'SpeechRecognition', { value: undefined, configurable: true });
+    } catch {
+      /* ignore */
+    }
+    try {
+      Object.defineProperty(w, 'webkitSpeechRecognition', { value: undefined, configurable: true });
+    } catch {
+      /* ignore */
+    }
   });
-  await gotoElder(page);
+  // addInitScript 只喺「完整導航」時執行；由 / 去 /#/elder 係 hash-only
+  // 同文檔導航，唔會重跑 → 註冊後先 reload 一次，確保 API 已被移除
+  await page.goto('/#/elder');
+  await page.reload();
+  await expect(page.getByTestId('text-input')).toBeVisible({ timeout: 30_000 });
 
   await expect(page.getByTestId('mic-button')).toHaveCount(0);
   const bubble = await askElder(page, '我今日有啲頭暈');

@@ -123,7 +123,8 @@ export interface AsrDeps {
 
 export interface AsrInstance {
   isSupported(): boolean;
-  start(callbacks: AsrCallbacks): void;
+  /** lang 缺省時用 ASR_LANG（zh-HK）；跟隨介面語言。 */
+  start(callbacks: AsrCallbacks, lang?: string): void;
   stop(): void;
 }
 
@@ -212,7 +213,7 @@ export function createAsr(deps: AsrDeps = {}): AsrInstance {
     }
   }
 
-  function start(callbacks: AsrCallbacks): void {
+  function start(callbacks: AsrCallbacks, lang = ASR_LANG): void {
     // 上一段聆聽未結束：先乾淨收尾，避免重複收音
     if (active) {
       active.dispose();
@@ -344,7 +345,7 @@ export function createAsr(deps: AsrDeps = {}): AsrInstance {
     }
     recognition = instance;
 
-    instance.lang = ASR_LANG;
+    instance.lang = lang;
     instance.interimResults = true;
     instance.continuous = false;
 
@@ -414,8 +415,8 @@ export function isSpeechSupported(): boolean {
 }
 
 /** 開始聆聽（zh-HK）；不支援／出錯會走 callbacks.onError，絕不拋錯 */
-export function startListening(callbacks: AsrCallbacks): void {
-  defaultAsr.start(callbacks);
+export function startListening(callbacks: AsrCallbacks, lang?: string): void {
+  defaultAsr.start(callbacks, lang);
 }
 
 /** 停止聆聽；沒有進行中的聆聽時為 no-op，絕不拋錯 */

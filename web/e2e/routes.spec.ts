@@ -3,7 +3,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-import { bypassConsent } from './helpers';
+import { bypassConsent, login } from './helpers';
 
 const ROUTES: Array<{ path: string; marker: string }> = [
   { path: '/', marker: 'role-elder' },
@@ -20,6 +20,7 @@ const ROUTES: Array<{ path: string; marker: string }> = [
 test('全部路由直接到訪 + reload 後仍正常呈現', async ({ page }) => {
   test.setTimeout(180_000);
   await bypassConsent(page);
+  await login(page);
 
   for (const { path, marker } of ROUTES) {
     const hash = path === '/' ? '/' : `/#${path}`;

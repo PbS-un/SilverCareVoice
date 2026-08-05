@@ -11,7 +11,8 @@ import type { Alert, ChronicCondition, HealthEvent } from '../types/entities';
 import { getWeeklyReport, type WeeklyReport } from '../services/ReportService';
 import { getInsights, type DashboardInsights } from '../services/InsightService';
 import { useAsyncData, useDbVersion, useElderContext } from '../lib/hooks';
-import { fmtDate, CONDITION_LABELS, SEVERITY_LABELS } from '../lib/format';
+import { fmtDate } from '../lib/format';
+import { useI18n } from '../i18n';
 
 interface ReportData {
   report: WeeklyReport;
@@ -22,6 +23,7 @@ interface ReportData {
 }
 
 export default function ReportPage() {
+  const { t } = useI18n();
   const dbVersion = useDbVersion();
   const ctx = useElderContext(dbVersion);
   const elderId = ctx?.elderId ?? '';
@@ -60,7 +62,7 @@ export default function ReportPage() {
           to="/"
           className="text-xl font-bold text-[var(--sc-idle-deep)] underline underline-offset-4 print:hidden"
         >
-          ← 返回
+          {t('report.back')}
         </Link>
         <button
           type="button"
@@ -68,46 +70,52 @@ export default function ReportPage() {
           className="btn-elder btn-primary !min-h-12 !px-6 text-xl print:hidden"
           onClick={() => window.print()}
         >
-          🖨 打印／存 PDF
+          {t('report.print')}
         </button>
       </div>
 
       {/* 報告頭 */}
       <header className="mb-8 border-b-4 border-ink pb-4">
         <p className="text-sm font-medium tracking-[0.3em] text-[var(--sc-muted)]">
-          SILVERCARE MACAU · 照護報告
+          {t('report.kicker')}
         </p>
-        <h1 className="font-serif-display text-4xl font-black">銀髮一句通 — 總報告</h1>
+        <h1 className="font-serif-display text-4xl font-black">{t('report.title')}</h1>
         <p className="mt-1 text-lg text-[var(--sc-ink-soft)]">
-          生成日期：{today.getFullYear()} 年 {today.getMonth() + 1} 月 {today.getDate()} 日
+          {t('report.generated', {
+            year: today.getFullYear(),
+            month: today.getMonth() + 1,
+            day: today.getDate(),
+          })}
         </p>
       </header>
 
       {!ctx || !data ? (
         <p className="text-xl text-[var(--sc-ink-soft)]" role="status">
-          統計緊……
+          {t('report.loading')}
         </p>
       ) : (
         <div className="flex flex-col gap-8">
           {/* 長者檔案 */}
-          <section aria-label="長者檔案">
-            <h2 className="report-h2">1. 長者檔案</h2>
+          <section aria-label={t('report.profile')}>
+            <h2 className="report-h2">{t('report.profile')}</h2>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xl">
               <div className="flex gap-2">
-                <dt className="font-bold">姓名：</dt>
+                <dt className="font-bold">{t('report.name')}</dt>
                 <dd>{ctx.elderName}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="font-bold">年齡：</dt>
-                <dd>{ctx.elder.age} 歲</dd>
+                <dt className="font-bold">{t('report.age')}</dt>
+                <dd>
+                  {ctx.elder.age} {t('report.ageUnit')}
+                </dd>
               </div>
               <div className="col-span-2 flex gap-2">
-                <dt className="font-bold">慢病：</dt>
+                <dt className="font-bold">{t('report.conditions')}</dt>
                 <dd>
                   {data.conditions.length === 0
-                    ? '無記錄'
+                    ? t('report.noConditions')
                     : data.conditions
-                        .map((c) => `${c.name}（${CONDITION_LABELS[c.type] ?? c.type}）`)
+                        .map((c) => `${c.name}（${t(`condition.${c.type}`)}）`)
                         .join('、')}
                 </dd>
               </div>
@@ -115,50 +123,54 @@ export default function ReportPage() {
           </section>
 
           {/* 週報 */}
-          <section aria-label="週報">
-            <h2 className="report-h2">2. 過去 7 日週報</h2>
+          <section aria-label={t('report.weekly')}>
+            <h2 className="report-h2">{t('report.weekly')}</h2>
             <p className="mb-3 rounded-lg bg-[var(--sc-idle-soft)] p-4 text-lg leading-relaxed">
               {data.report.aiSummary}
             </p>
             <table className="report-table">
               <tbody>
                 <tr>
-                  <th>服藥依從率</th>
+                  <th>{t('report.adherence')}</th>
                   <td>
                     {data.report.medicationAdherence.expected > 0
                       ? `${Math.round(data.report.medicationAdherence.rate * 100)}%（${data.report.medicationAdherence.taken}/${data.report.medicationAdherence.expected}）`
-                      : '期內無排程'}
+                      : t('report.noSchedule')}
                   </td>
                 </tr>
                 <tr>
-                  <th>健康記錄數</th>
-                  <td>{data.report.recordCount} 項</td>
+                  <th>{t('report.recordCount')}</th>
+                  <td>
+                    {data.report.recordCount} {t('report.recordCountUnit')}
+                  </td>
                 </tr>
                 <tr>
-                  <th>需要留意事件</th>
-                  <td>{data.report.eventCount} 個</td>
+                  <th>{t('report.events')}</th>
+                  <td>
+                    {data.report.eventCount} {t('report.eventsUnit')}
+                  </td>
                 </tr>
                 <tr>
-                  <th>平均血壓</th>
+                  <th>{t('report.bpAvg')}</th>
                   <td>
                     {data.report.bpAverage
                       ? `${data.report.bpAverage.systolic}/${data.report.bpAverage.diastolic} mmHg`
-                      : '期內無記錄'}
+                      : t('report.noData')}
                   </td>
                 </tr>
                 <tr>
-                  <th>平均血糖</th>
+                  <th>{t('report.glucoseAvg')}</th>
                   <td>
                     {data.report.glucoseAverage !== undefined
                       ? `${data.report.glucoseAverage} mmol/L`
-                      : '期內無記錄'}
+                      : t('report.noData')}
                   </td>
                 </tr>
                 <tr>
-                  <th>常見症狀</th>
+                  <th>{t('report.symptoms')}</th>
                   <td>
                     {data.report.topSymptoms.length === 0
-                      ? '無'
+                      ? t('report.none')
                       : data.report.topSymptoms.map((s) => `${s.symptom}（${s.count}次）`).join('、')}
                   </td>
                 </tr>
@@ -167,26 +179,31 @@ export default function ReportPage() {
           </section>
 
           {/* 總覽 */}
-          <section aria-label="整體總覽">
-            <h2 className="report-h2">3. 整體數據總覽</h2>
+          <section aria-label={t('report.overview')}>
+            <h2 className="report-h2">{t('report.overview')}</h2>
             <table className="report-table">
               <tbody>
                 <tr>
-                  <th>長者數</th>
-                  <td>{data.insights.elderCount} 位</td>
+                  <th>{t('report.elderCount')}</th>
+                  <td>
+                    {data.insights.elderCount} {t('report.elderCountUnit')}
+                  </td>
                 </tr>
                 <tr>
-                  <th>健康記錄總數</th>
-                  <td>{data.insights.totalRecordCount} 項</td>
+                  <th>{t('report.totalRecords')}</th>
+                  <td>
+                    {data.insights.totalRecordCount} {t('report.recordCountUnit')}
+                  </td>
                 </tr>
                 <tr>
-                  <th>整體服藥依從率</th>
+                  <th>{t('report.overallAdherence')}</th>
                   <td>{Math.round(data.insights.medicationAdherenceRate * 100)}%</td>
                 </tr>
                 <tr>
-                  <th>留意／緊急事件</th>
+                  <th>{t('report.eventMix')}</th>
                   <td>
-                    {data.insights.attentionEventCount} 留意 · {data.insights.urgentEventCount} 緊急
+                    {t('insights.attention', { n: data.insights.attentionEventCount })} ·{' '}
+                    {t('insights.urgent', { n: data.insights.urgentEventCount })}
                   </td>
                 </tr>
               </tbody>
@@ -194,27 +211,27 @@ export default function ReportPage() {
           </section>
 
           {/* 近期事件 */}
-          <section aria-label="近期健康事件">
-            <h2 className="report-h2">4. 近期健康事件（最多 10 項）</h2>
+          <section aria-label={t('report.recentEvents')}>
+            <h2 className="report-h2">{t('report.recentEvents')}</h2>
             <table className="report-table">
               <thead>
                 <tr>
-                  <th>時間</th>
-                  <th>級別</th>
-                  <th>內容</th>
+                  <th>{t('report.time')}</th>
+                  <th>{t('report.level')}</th>
+                  <th>{t('report.content')}</th>
                 </tr>
               </thead>
               <tbody>
                 {data.recentEvents.map((e) => (
                   <tr key={e.id}>
                     <td className="whitespace-nowrap">{fmtDate(e.createdAt)}</td>
-                    <td>{SEVERITY_LABELS[e.severity]}</td>
+                    <td>{t(`severity.${e.severity}`)}</td>
                     <td>{e.summary}</td>
                   </tr>
                 ))}
                 {data.recentEvents.length === 0 && (
                   <tr>
-                    <td colSpan={3}>冇非正常事件</td>
+                    <td colSpan={3}>{t('report.noEvents')}</td>
                   </tr>
                 )}
               </tbody>
@@ -222,14 +239,14 @@ export default function ReportPage() {
           </section>
 
           {/* 近期提醒 */}
-          <section aria-label="近期家屬提醒">
-            <h2 className="report-h2">5. 近期家屬提醒（最多 10 項）</h2>
+          <section aria-label={t('report.recentAlerts')}>
+            <h2 className="report-h2">{t('report.recentAlerts')}</h2>
             <table className="report-table">
               <thead>
                 <tr>
-                  <th>時間</th>
-                  <th>狀態</th>
-                  <th>內容</th>
+                  <th>{t('report.time')}</th>
+                  <th>{t('report.status')}</th>
+                  <th>{t('report.content')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -237,14 +254,20 @@ export default function ReportPage() {
                   <tr key={a.id}>
                     <td className="whitespace-nowrap">{fmtDate(a.createdAt)}</td>
                     <td>
-                      {a.status === 'open' ? '未處理' : a.status === 'acknowledged' ? '知道了' : '已跟進'}
+                      {t(
+                        a.status === 'open'
+                          ? 'familyAlerts.statusOpen'
+                          : a.status === 'acknowledged'
+                            ? 'familyAlerts.statusAcknowledged'
+                            : 'familyAlerts.statusResolved',
+                      )}
                     </td>
                     <td>{a.message}</td>
                   </tr>
                 ))}
                 {data.recentAlerts.length === 0 && (
                   <tr>
-                    <td colSpan={3}>冇提醒</td>
+                    <td colSpan={3}>{t('report.noAlerts')}</td>
                   </tr>
                 )}
               </tbody>
@@ -252,7 +275,7 @@ export default function ReportPage() {
           </section>
 
           <footer className="mt-4 border-t border-[var(--sc-line)] pt-4 text-base text-[var(--sc-muted)]">
-            本報告由銀髮一句通按裝置數據庫實算生成，只供參考，不是醫療診斷。如有疑問請諮詢醫護人員。
+            {t('report.footer')}
           </footer>
         </div>
       )}

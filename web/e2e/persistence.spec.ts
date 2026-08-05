@@ -3,11 +3,12 @@
  */
 import { test, expect } from '@playwright/test';
 
-import { bypassConsent, askElder } from './helpers';
+import { bypassConsent, login, askElder } from './helpers';
 
 test('持久化：reload 後對話記錄與血壓記錄仍在', async ({ page }) => {
   test.setTimeout(120_000);
   await bypassConsent(page);
+  await login(page);
 
   await page.goto('/#/elder');
   await expect(page.getByTestId('text-input')).toBeVisible({ timeout: 30_000 });

@@ -17,6 +17,7 @@ import { getProvider } from '../../data/DataProvider';
 import { KNOWLEDGE_BASE } from '../../data/knowledgeBase';
 import { tableNameOf } from '../../types/entities';
 import type { Appointment, ResourceDirectory } from '../../types/entities';
+import { useI18n } from '../../i18n';
 
 /** 專科選項（「其他」觸发自填欄位）。 */
 const SPECIALTIES = [
@@ -79,6 +80,7 @@ export default function AppointmentModal({
   onDone,
   initial,
 }: AppointmentModalProps) {
+  const { t } = useI18n();
   const [location, setLocation] = useState(initial?.location ?? '');
   const [date, setDate] = useState(initial?.date ?? '');
   const [time, setTime] = useState(initial?.time ?? '');
@@ -104,10 +106,10 @@ export default function AppointmentModal({
       seen.add(key);
       opts.push(sublabel ? { value: key, label: key, sublabel } : { value: key, label: key });
     };
-    for (const a of appointments) push(a.location, '去過');
+    for (const a of appointments) push(a.location, t('appt.visited'));
     for (const r of resources) push(r.name, `${r.category} · ${r.address}`);
     for (const k of KNOWLEDGE_BASE) {
-      if (k.category === 'service') push(k.title, k.location ?? '社區服務');
+      if (k.category === 'service') push(k.title, k.location ?? t('appt.community'));
     }
     return opts;
   }, [appointments, resources]);
@@ -133,11 +135,11 @@ export default function AppointmentModal({
 
   const submit = async (): Promise<void> => {
     if (!date || !location.trim()) {
-      setErr('請填寫日期同地點');
+      setErr(t('appt.errorDateLocation'));
       return;
     }
     if (!timeTbd && !time) {
-      setErr('請填寫時間，或剔「時間未定」');
+      setErr(t('appt.errorTime'));
       return;
     }
     setErr('');
@@ -167,7 +169,7 @@ export default function AppointmentModal({
   };
 
   return (
-    <Modal title="新增覆診" onClose={onClose}>
+    <Modal title={t('appt.title')} onClose={onClose}>
       <form
         className="flex flex-col gap-4"
         onSubmit={(e) => {
@@ -176,14 +178,14 @@ export default function AppointmentModal({
         }}
       >
         {/* quick chips：只預填，不自動提交 */}
-        <div className="flex flex-wrap gap-2" aria-label="快速預填">
+        <div className="flex flex-wrap gap-2" aria-label={t('appt.quickAria')}>
           <button
             type="button"
             data-testid="appt-chip-week"
             onClick={() => applyChip('week')}
             className="btn-elder btn-ghost !min-h-11 !px-3 text-lg"
           >
-            下星期
+            {t('appt.chipWeek')}
           </button>
           <button
             type="button"
@@ -191,7 +193,7 @@ export default function AppointmentModal({
             onClick={() => applyChip('month')}
             className="btn-elder btn-ghost !min-h-11 !px-3 text-lg"
           >
-            下個月
+            {t('appt.chipMonth')}
           </button>
           <button
             type="button"
@@ -199,7 +201,7 @@ export default function AppointmentModal({
             onClick={() => applyChip('hospital')}
             className="btn-elder btn-ghost !min-h-11 !px-3 text-lg"
           >
-            醫院覆診
+            {t('appt.chipHospital')}
           </button>
           <button
             type="button"
@@ -207,45 +209,45 @@ export default function AppointmentModal({
             onClick={() => applyChip('family')}
             className="btn-elder btn-ghost !min-h-11 !px-3 text-lg"
           >
-            家庭醫生
+            {t('appt.chipFamily')}
           </button>
         </div>
 
         {/* 醫院／診所 */}
         <div className="flex flex-col gap-1">
-          <span className="text-xl font-bold">醫院／診所</span>
+          <span className="text-xl font-bold">{t('appt.location')}</span>
           <SearchableCombobox
             options={locationOptions}
             value={location}
             onChange={setLocation}
             onSelect={setLocation}
-            placeholder="例如：黑沙環衛生中心"
+            placeholder={t('appt.locationPlaceholder')}
             testIdPrefix="appt-location"
             onCreate={(text) => setLocation(text)}
-            createLabel={(text) => `使用『${text}』`}
+            createLabel={(text) => t('appt.useText', { text })}
           />
         </div>
 
         {/* 日期 + 時間 */}
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1 text-xl font-bold">
-            覆診日期
+            {t('appt.date')}
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              aria-label="覆診日期"
+              aria-label={t('appt.date')}
               data-testid="appt-date"
               className="min-h-14 rounded-xl border-2 border-[var(--sc-line)] px-3 text-elder-body outline-none focus:border-[var(--sc-idle)]"
             />
           </label>
           <label className="flex flex-col gap-1 text-xl font-bold">
-            覆診時間
+            {t('appt.time')}
             <input
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
-              aria-label="覆診時間"
+              aria-label={t('appt.time')}
               disabled={timeTbd}
               data-testid="appt-time"
               className={`min-h-14 rounded-xl border-2 border-[var(--sc-line)] px-3 text-elder-body outline-none focus:border-[var(--sc-idle)] ${
@@ -262,12 +264,12 @@ export default function AppointmentModal({
             data-testid="appt-time-tbd"
             className="h-7 w-7 accent-[var(--sc-idle-deep)]"
           />
-          時間未定（未約到時間）
+          {t('appt.timeTbd')}
         </label>
 
         {/* 睇邊科 */}
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-xl font-bold">睇邊科？</legend>
+          <legend className="mb-1 text-xl font-bold">{t('appt.specialty')}</legend>
           <div className="grid grid-cols-3 gap-2">
             {SPECIALTIES.map((s) => (
               <button
@@ -289,8 +291,8 @@ export default function AppointmentModal({
               type="text"
               value={otherSpecialty}
               onChange={(e) => setOtherSpecialty(e.target.value)}
-              placeholder="請填寫科目"
-              aria-label="其他科目"
+              placeholder={t('appt.specialtyOtherPlaceholder')}
+              aria-label={t('appt.specialtyOtherPlaceholder')}
               data-testid="appt-specialty-other-input"
               className="min-h-14 rounded-xl border-2 border-[var(--sc-line)] px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
             />
@@ -299,13 +301,13 @@ export default function AppointmentModal({
 
         {/* 醫生 */}
         <label className="flex flex-col gap-1 text-xl font-bold">
-          醫生（可留空）
+          {t('appt.doctor')}
           <input
             type="text"
             value={doctor}
             onChange={(e) => setDoctor(e.target.value)}
-            placeholder="例如：陳醫生"
-            aria-label="醫生"
+            placeholder={t('appt.doctorPlaceholder')}
+            aria-label={t('appt.doctor')}
             data-testid="appt-doctor"
             className="min-h-14 rounded-xl border-2 border-[var(--sc-line)] px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
           />
@@ -313,13 +315,13 @@ export default function AppointmentModal({
 
         {/* 備註 */}
         <label className="flex flex-col gap-1 text-xl font-bold">
-          備註（可留空）
+          {t('appt.note')}
           <textarea
             rows={2}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="例如：帶驗血報告"
-            aria-label="備註"
+            placeholder={t('appt.notePlaceholder')}
+            aria-label={t('appt.note')}
             data-testid="appt-note"
             className="rounded-xl border-2 border-[var(--sc-line)] px-4 py-3 text-elder-body outline-none focus:border-[var(--sc-idle)]"
           />
@@ -331,7 +333,7 @@ export default function AppointmentModal({
           </p>
         )}
         <button type="submit" className="btn-elder btn-primary w-full" disabled={busy}>
-          {busy ? '記低緊……' : '記低覆診'}
+          {busy ? t('appt.saving') : t('appt.save')}
         </button>
       </form>
     </Modal>

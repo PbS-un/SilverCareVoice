@@ -28,7 +28,8 @@ import type {
   VitalRecord,
 } from '../types/entities';
 import { useAsyncData, useDbVersion, useElderContext } from '../lib/hooks';
-import { fmtDate, fmtShortDate, MED_STATUS_LABELS, SEVERITY_LABELS, VITAL_LABELS } from '../lib/format';
+import { fmtDate, fmtShortDate } from '../lib/format';
+import { useI18n } from '../i18n';
 import BottomNav, { FAMILY_NAV_ITEMS } from '../components/BottomNav';
 
 type RangeDays = 7 | 30;
@@ -49,6 +50,7 @@ const TONE_DOT: Record<TimelineEntry['tone'], string> = {
 };
 
 export default function FamilyHealth() {
+  const { t } = useI18n();
   const dbVersion = useDbVersion();
   const ctx = useElderContext(dbVersion);
   const elderId = ctx?.elderId ?? '';
@@ -81,44 +83,53 @@ export default function FamilyHealth() {
         provider.list<Caregiver>(tableNameOf('Caregiver')),
       ]);
 
-    const medName = (id: string): string => meds.find((m) => m.id === id)?.name ?? '藥物';
-    const caregiverName = (id: string): string => caregivers.find((c) => c.id === id)?.name ?? '家人';
+    const medName = (id: string): string => meds.find((m) => m.id === id)?.name ?? t('common.medication');
+    const caregiverName = (id: string): string => caregivers.find((c) => c.id === id)?.name ?? t('common.family');
 
     const entries: TimelineEntry[] = [
       ...vitals.map<TimelineEntry>((v) => ({
         at: v.measuredAt,
-        title: `${VITAL_LABELS[v.type]} ${
+        title: `${t(`vital.${v.type}`)} ${
           v.type === 'blood_pressure' ? `${v.systolic}/${v.diastolic} mmHg` : `${v.value} ${v.unit}`
         }`,
-        detail: `來源：${v.source === 'voice' ? '語音' : v.source === 'text' ? '文字' : v.source === 'form' ? '手動輸入' : 'seed'}`,
+        detail: t('familyHealth.source', {
+          source:
+            v.source === 'voice'
+              ? t('source.voice')
+              : v.source === 'text'
+                ? t('source.text')
+                : v.source === 'form'
+                  ? t('source.form')
+                  : t('source.seed'),
+        }),
         tone: 'idle',
       })),
       ...symptoms.map<TimelineEntry>((s) => ({
         at: s.occurredAt,
-        title: `症狀：${s.symptoms.join('、')}`,
+        title: t('familyHealth.symptom', { symptoms: s.symptoms.join('、') }),
         detail: s.description || undefined,
         tone: s.severity === 'severe' ? 'urgent' : s.severity === 'moderate' ? 'attention' : 'muted',
       })),
       ...logs.map<TimelineEntry>((l) => ({
         at: l.takenAt ?? l.scheduledAt,
-        title: `${medName(l.medicationId)} · ${MED_STATUS_LABELS[l.status]}`,
+        title: `${medName(l.medicationId)} · ${t(`medStatus.${l.status}`)}`,
         tone: l.status === 'taken' ? 'ok' : l.status === 'missed' ? 'urgent' : 'attention',
       })),
       ...appointments.map<TimelineEntry>((a) => ({
         at: a.date,
-        title: `覆診：${a.location}`,
+        title: t('familyHealth.appointment', { location: a.location }),
         detail: a.note || undefined,
         tone: 'muted',
       })),
       ...events.map<TimelineEntry>((e) => ({
         at: e.createdAt,
-        title: `健康事件（${SEVERITY_LABELS[e.severity]}）`,
+        title: t('familyHealth.event', { severity: t(`severity.${e.severity}`) }),
         detail: e.summary,
         tone: e.severity === 'urgent' ? 'urgent' : e.severity === 'attention' ? 'attention' : 'ok',
       })),
       ...followUps.map<TimelineEntry>((f) => ({
         at: f.createdAt,
-        title: `${caregiverName(f.caregiverId)}已跟進`,
+        title: t('familyHealth.followedUp', { name: caregiverName(f.caregiverId) }),
         detail: f.note || undefined,
         tone: 'ok',
       })),
@@ -141,10 +152,10 @@ export default function FamilyHealth() {
 
   return (
     <main className="bg-paper-grain mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-28 pt-6">
-      <h1 className="mb-5 font-serif-display text-elder-display text-ink">健康趨勢</h1>
+      <h1 className="mb-5 font-serif-display text-elder-display text-ink">{t('familyHealth.title')}</h1>
 
       {/* 7 / 30 日切換 */}
-      <div role="tablist" aria-label="時間範圍" className="mb-5 grid grid-cols-2 gap-2">
+      <div role="tablist" aria-label={t('familyHealth.rangeAria')} className="mb-5 grid grid-cols-2 gap-2">
         {([7, 30] as const).map((d) => (
           <button
             key={d}
@@ -155,16 +166,16 @@ export default function FamilyHealth() {
             onClick={() => setDays(d)}
             className={`btn-elder ${days === d ? 'btn-primary' : 'btn-ghost'}`}
           >
-            最近 {d} 日
+            {t('familyHealth.recent', { d })}
           </button>
         ))}
       </div>
 
       {/* 血壓圖 */}
-      <section className="card-elder mb-5" aria-label="血壓趨勢">
-        <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">血壓（mmHg）</h2>
+      <section className="card-elder mb-5" aria-label={t('familyHealth.bpChartAria')}>
+        <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">{t('familyHealth.bpChart')}</h2>
         {bpData.length === 0 ? (
-          <p className="text-xl text-[var(--sc-muted)]">期內無血壓記錄</p>
+          <p className="text-xl text-[var(--sc-muted)]">{t('familyHealth.bpNone')}</p>
         ) : (
           <div data-testid="bp-chart" className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -182,7 +193,7 @@ export default function FamilyHealth() {
                 <Line
                   type="monotone"
                   dataKey="systolic"
-                  name="收縮壓"
+                  name={t('vital.systolic')}
                   stroke="var(--sc-idle)"
                   strokeWidth={3}
                   dot={{ r: 3 }}
@@ -190,7 +201,7 @@ export default function FamilyHealth() {
                 <Line
                   type="monotone"
                   dataKey="diastolic"
-                  name="舒張壓"
+                  name={t('vital.diastolic')}
                   stroke="var(--sc-ok)"
                   strokeWidth={3}
                   dot={{ r: 3 }}
@@ -202,10 +213,10 @@ export default function FamilyHealth() {
       </section>
 
       {/* 血糖圖 */}
-      <section className="card-elder mb-6" aria-label="血糖趨勢">
-        <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">血糖（mmol/L）</h2>
+      <section className="card-elder mb-6" aria-label={t('familyHealth.glucoseChartAria')}>
+        <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">{t('familyHealth.glucoseChart')}</h2>
         {glucoseData.length === 0 ? (
-          <p className="text-xl text-[var(--sc-muted)]">期內無血糖記錄</p>
+          <p className="text-xl text-[var(--sc-muted)]">{t('familyHealth.glucoseNone')}</p>
         ) : (
           <div data-testid="glucose-chart" className="h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -218,7 +229,7 @@ export default function FamilyHealth() {
                 <Line
                   type="monotone"
                   dataKey="value"
-                  name="血糖"
+                  name={t('vital.blood_glucose')}
                   stroke="var(--sc-thinking)"
                   strokeWidth={3}
                   dot={{ r: 3 }}
@@ -230,8 +241,8 @@ export default function FamilyHealth() {
       </section>
 
       {/* Timeline */}
-      <section aria-label="時間線">
-        <h2 className="mb-4 text-elder-title font-serif-display">時間線</h2>
+      <section aria-label={t('familyHealth.timelineAria')}>
+        <h2 className="mb-4 text-elder-title font-serif-display">{t('familyHealth.timeline')}</h2>
         <ol data-testid="timeline" className="relative flex flex-col gap-4 border-l-2 border-[var(--sc-line)] pl-5">
           {(timeline ?? []).slice(0, 60).map((e, i) => (
             <li key={`${e.at}-${i}`} className="relative">
@@ -245,7 +256,7 @@ export default function FamilyHealth() {
             </li>
           ))}
           {(timeline ?? []).length === 0 && (
-            <li className="text-xl text-[var(--sc-muted)]">期內沒有記錄</li>
+            <li className="text-xl text-[var(--sc-muted)]">{t('familyHealth.timelineNone')}</li>
           )}
         </ol>
       </section>

@@ -7,7 +7,7 @@
  * 流程（全部真實操作，非預設素材）：
  *  1. build web（可 --skip-build 略過）
  *  2. 起 server(8787, provider:local) + vite preview(4173)
- *  3. Playwright 實機操作：Demo Reset → /elder 輸入句子 → 回答氣泡
+ *  3. Playwright 實機操作：Demo Login（tester/tester）→ Demo Reset → /elder 輸入句子 → 回答氣泡
  *     → 快捷「量血壓」新增一筆 → /family/health 圖表（多出新點）
  *     → /family/alerts 提醒列表；三頁截圖複製進 dist/brief/
  *  4. 有 --url 時用 qrcode 生成 QR data URL 注入 /print-brief
@@ -54,14 +54,20 @@ async function captureScreenshots() {
   const ctx = await browser.newContext({ viewport: { width: 430, height: 932 } });
   const page = await ctx.newPage();
 
-  // 1) Demo Reset（保證可重複執行、狀態確定）
+  // 1) Demo Login（T3：一律經真實登入流程，不 bypass）
   await page.goto(`${BASE}/`);
+  await page.getByTestId('demo-login-id').fill('tester');
+  await page.getByTestId('demo-login-password').fill('tester');
+  await page.getByTestId('demo-login-submit').click();
+  await page.getByTestId('role-elder').waitFor({ timeout: 30_000 });
+
+  // 2) Demo Reset（保證可重複執行、狀態確定）
   await page.getByTestId('demo-reset').click();
   await page.getByTestId('demo-reset-confirm').click();
   await page.getByText('已重置為示範資料').waitFor({ timeout: 30_000 });
   await sleep(800);
 
-  // 2) /elder：同意 → 輸入一句 → 回答氣泡截圖
+  // 3) /elder：同意 → 輸入一句 → 回答氣泡截圖
   await page.getByTestId('role-elder').click();
   await agreeConsentIfShown(page);
   await page.getByTestId('text-input').fill('我啱啱血壓158/95，仲有啲頭暈');
@@ -72,7 +78,7 @@ async function captureScreenshots() {
   await page.screenshot({ path: path.join(briefDir, 'elder-answer.png') });
   console.log('[pdf] 截圖：/elder 回答氣泡');
 
-  // 3) 快捷「量血壓」實際新增一筆（讓 /family/health 圖表多一個點）
+  // 4) 快捷「量血壓」實際新增一筆（讓 /family/health 圖表多一個點）
   await page.getByTestId('quick-bp').click();
   await page.getByTestId('bp-systolic-input').fill('162');
   await page.getByTestId('bp-diastolic-input').fill('98');
@@ -80,7 +86,7 @@ async function captureScreenshots() {
   await page.getByText('已經通知家人').first().waitFor({ timeout: 15_000 }).catch(() => undefined);
   await sleep(600);
 
-  // 4) /family/health：血壓圖（含剛新增的點）截圖
+  // 5) /family/health：血壓圖（含剛新增的點）截圖
   await page.goto(`${BASE}/#/family/health`);
   await agreeConsentIfShown(page);
   const bpSection = page.locator('section', { has: page.getByTestId('bp-chart') });
@@ -90,7 +96,7 @@ async function captureScreenshots() {
   await bpSection.screenshot({ path: path.join(briefDir, 'family-health-chart.png') });
   console.log('[pdf] 截圖：/family/health 血壓圖（含新增點）');
 
-  // 5) /family/alerts：提醒列表截圖
+  // 6) /family/alerts：提醒列表截圖
   await page.goto(`${BASE}/#/family/alerts`);
   await agreeConsentIfShown(page);
   await page.getByTestId('family-alert-item').first().waitFor({ state: 'visible', timeout: 15_000 });

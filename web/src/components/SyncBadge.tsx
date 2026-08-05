@@ -6,8 +6,10 @@ import { useEffect, useState } from 'react';
 
 import { enableSync } from '../data/DataProvider';
 import { getSyncToken } from '../data/sync/wire';
+import { useI18n } from '../i18n';
 
 export default function SyncBadge() {
+  const { t } = useI18n();
   const [synced, setSynced] = useState<boolean | null>(null);
   const [paired, setPaired] = useState(true);
 
@@ -43,7 +45,7 @@ export default function SyncBadge() {
         aria-hidden
         className={`status-dot ${synced === true && paired ? 'status-ok' : 'status-muted'}`}
       />
-      {synced === true ? (paired ? '已連接同步伺服器' : '單機模式') : '離線模式'}
+      {synced === true ? (paired ? t('sync.connected') : t('sync.standalone')) : t('sync.offline')}
     </span>
   );
 }

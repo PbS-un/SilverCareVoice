@@ -17,6 +17,9 @@
 - 只部署 `web/dist` 靜態檔，**無需任何後端**。
 - 資料存於瀏覽器 **IndexedDB（Dexie）**；AI 走 **Local Hybrid Engine**（本地意圖識別＋規則引擎），離線可用。
 - 適合評委一鍵體驗：打開 URL 即用，Demo Reset 可還原示範資料。
+- **Demo Login**：打開即見登入頁，ID／Password 均為 `tester`（sessionStorage 保持同 session 登入）；登入後才可進入角色選擇與各功能頁。
+- **四語言 UI**：繁體中文／简体中文／Português／English，登入頁與角色選擇頁即時切換、`localStorage` 保留；AI 回覆、ASR／TTS 語音跟隨所選語言。
+- **Elder 自動朗讀**：長者端 AI 回答完成後自動朗讀一次（TTS 跟隨語言）；重新渲染／歷史載入／返回頁面不會重播，手動播放按鈕保留。
 
 ### 模式 B：本地雙裝置（Sync Server + DeepSeek Proxy）
 
@@ -59,7 +62,7 @@ npm run dev:all        # server 8787 + web 5173
 #    重啟 server 即生效；不填則全程離線本地模式。
 ```
 
-打開 http://localhost:5173 → 選擇「我是長者」或「我是家人」。
+打開 http://localhost:5173 → Demo Login（tester / tester）→ 選擇「我是長者」或「我是家人」。
 
 ### Seed 與 Demo Reset
 

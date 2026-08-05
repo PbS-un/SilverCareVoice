@@ -19,7 +19,7 @@ import { useAsyncData } from '../../lib/hooks';
 import { createMedication, recordMedicationStatus } from '../../lib/manualEntry';
 import { matchMedications } from '../../lib/medicationSearch';
 import { DOSE_UNITS, formatDose, parseDosage } from '../../lib/doseFormat';
-import { MED_STATUS_LABELS } from '../../lib/format';
+import { useI18n } from '../../i18n';
 
 /* ---------------- 時間 chips ---------------- */
 
@@ -46,6 +46,19 @@ const TIME_CHIPS: Array<{ key: TimeKey; label: string; time?: string }> = [
   { key: 'bedtime', label: '睡前', time: '21:30' },
   { key: 'custom', label: '自訂時間' },
 ];
+
+/** TIME_CHIPS 的翻譯 key（DB 仍存中文 schedule，UI 顯示按語言）。 */
+const TIME_CHIP_KEY: Record<TimeKey, string> = {
+  now: 'med.now',
+  'pre-breakfast': 'med.preBreakfast',
+  'post-breakfast': 'med.postBreakfast',
+  'pre-lunch': 'med.preLunch',
+  'post-lunch': 'med.postLunch',
+  'pre-dinner': 'med.preDinner',
+  'post-dinner': 'med.postDinner',
+  bedtime: 'med.bedtime',
+  custom: 'med.customTime',
+};
 
 /** 今日指定 HH:mm（本地時間）的 ISO；缺省或無法解析時用現在。 */
 function isoTodayAt(hhmm?: string): string {
@@ -78,6 +91,7 @@ export default function MedicationLogModal({
   onDone,
   initialQuery,
 }: MedicationLogModalProps) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -127,7 +141,7 @@ export default function MedicationLogModal({
       setDoseAmount('');
       setDoseUnit('');
       setCustomUnit('');
-      setDoseHint(m.dosage ? `原本劑量：${m.dosage}` : '');
+      setDoseHint(m.dosage ? t('med.originalDose', { dosage: m.dosage }) : '');
     }
   };
 
@@ -192,7 +206,7 @@ export default function MedicationLogModal({
       if (creating) {
         const name = newMedName.trim() || query.trim();
         if (!name) {
-          setErr('請輸入藥名。');
+          setErr(t('med.errorName'));
           setBusy(false);
           return;
         }
@@ -209,14 +223,14 @@ export default function MedicationLogModal({
         medId = created.id;
       }
       if (!medId) {
-        setErr('請先揀藥，或者新增一隻新藥。');
+        setErr(t('med.errorSelect'));
         setBusy(false);
         return;
       }
       await recordMedicationStatus(elderId, medId, status, resolveScheduledAt());
-      onDone(`已記低：${MED_STATUS_LABELS[status]} ✓`);
+      onDone(t('med.saved', { status: t(`medStatus.${status}`) }));
     } catch {
-      setErr('出咗啲問題，請再試一次。');
+      setErr(t('med.errorGeneric'));
     } finally {
       setBusy(false);
     }
@@ -226,22 +240,22 @@ export default function MedicationLogModal({
     'min-h-12 w-full rounded-xl border-2 border-[var(--sc-line)] bg-white px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]';
 
   return (
-    <Modal title="記錄食藥" onClose={onClose}>
+    <Modal title={t('med.title')} onClose={onClose}>
       <div className="flex flex-col gap-5">
         {/* ── 藥物 ── */}
         <div className="flex flex-col gap-2">
-          <span className="text-xl font-bold">邊種藥？</span>
+          <span className="text-xl font-bold">{t('med.which')}</span>
           {creating ? (
             <div className="flex flex-col gap-2 rounded-2xl border-2 border-dashed border-[var(--sc-line)] bg-[var(--sc-idle-soft)]/40 p-4">
               <label className="flex flex-col gap-1 text-xl font-bold">
-                新藥名
+                {t('med.newName')}
                 <input
                   data-testid="med-new-name-input"
                   type="text"
                   value={newMedName}
                   onChange={(e) => setNewMedName(e.target.value)}
                   className={inputCls}
-                  aria-label="新藥名"
+                  aria-label={t('med.newName')}
                 />
               </label>
               <button
@@ -253,7 +267,7 @@ export default function MedicationLogModal({
                   setNewMedName('');
                 }}
               >
-                ← 返回揀藥
+                {t('med.createNew')}
               </button>
             </div>
           ) : (
@@ -272,7 +286,7 @@ export default function MedicationLogModal({
                   setQuery(m.name);
                   prefillDose(m);
                 }}
-                placeholder="輸入藥名搜尋……"
+                placeholder={t('med.searchPlaceholder')}
                 testIdPrefix="med-search"
                 onCreate={(text) => {
                   setCreating(true);
@@ -281,10 +295,12 @@ export default function MedicationLogModal({
                 }}
               />
               {confidence === 'low' && (
-                <p className="text-lg text-[var(--sc-thinking)]">請核對藥名無誤再記錄。</p>
+                <p className="text-lg text-[var(--sc-thinking)]">{t('med.lowConfidence')}</p>
               )}
               {selected && selected.schedule && (
-                <p className="text-xl text-[var(--sc-ink-soft)]">時間：{selected.schedule}</p>
+                <p className="text-xl text-[var(--sc-ink-soft)]">
+                  {t('med.schedule', { schedule: selected.schedule })}
+                </p>
               )}
             </>
           )}
@@ -292,7 +308,7 @@ export default function MedicationLogModal({
 
         {/* ── 每次份量 ── */}
         <div className="flex flex-col gap-2">
-          <span className="text-xl font-bold">每次份量</span>
+          <span className="text-xl font-bold">{t('med.dose')}</span>
           <div className="flex flex-wrap items-center gap-2">
             <input
               data-testid="med-dose-amount"
@@ -303,17 +319,17 @@ export default function MedicationLogModal({
               value={doseAmount}
               onChange={(e) => setDoseAmount(e.target.value)}
               placeholder="0"
-              aria-label="每次份量數值"
+              aria-label={t('med.dose')}
               className={`${inputCls} max-w-28 flex-none`}
             />
             <select
               data-testid="med-dose-unit"
               value={doseUnit}
               onChange={(e) => setDoseUnit(e.target.value)}
-              aria-label="劑量單位"
+              aria-label={t('med.doseUnit')}
               className={`${inputCls} flex-1 basis-32 bg-white`}
             >
-              <option value="">（揀單位）</option>
+              <option value="">{t('med.doseUnit')}</option>
               {DOSE_UNITS.map((u) => (
                 <option key={u} value={u}>
                   {u}
@@ -326,15 +342,16 @@ export default function MedicationLogModal({
                 type="text"
                 value={customUnit}
                 onChange={(e) => setCustomUnit(e.target.value)}
-                placeholder="自訂單位"
-                aria-label="自訂單位"
+                placeholder={t('med.customUnit')}
+                aria-label={t('med.customUnit')}
                 className={`${inputCls} flex-1 basis-32`}
               />
             )}
           </div>
           {dosePreview && (
             <p className="text-xl text-[var(--sc-ink-soft)]">
-              每次：<span className="font-bold text-[var(--sc-ink)]">{dosePreview}</span>
+              {t('med.eachDose')}
+              <span className="font-bold text-[var(--sc-ink)]">{dosePreview}</span>
             </p>
           )}
           {doseHint && <p className="text-lg text-[var(--sc-muted)]">{doseHint}</p>}
@@ -342,8 +359,8 @@ export default function MedicationLogModal({
 
         {/* ── 幾時食？ ── */}
         <div className="flex flex-col gap-2">
-          <span className="text-xl font-bold">幾時食？</span>
-          <div className="flex flex-wrap gap-2" role="group" aria-label="服藥時間">
+          <span className="text-xl font-bold">{t('med.when')}</span>
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t('med.when')}>
             {TIME_CHIPS.map((chip) => (
               <button
                 key={chip.key}
@@ -357,7 +374,7 @@ export default function MedicationLogModal({
                     : 'border-[var(--sc-line)] bg-white text-[var(--sc-ink)]'
                 }`}
               >
-                {chip.label}
+                {t(TIME_CHIP_KEY[chip.key])}
               </button>
             ))}
           </div>
@@ -367,7 +384,7 @@ export default function MedicationLogModal({
               type="time"
               value={customTime}
               onChange={(e) => setCustomTime(e.target.value)}
-              aria-label="自訂時間"
+              aria-label={t('med.customTime')}
               className={`${inputCls} max-w-44`}
             />
           )}
@@ -387,7 +404,7 @@ export default function MedicationLogModal({
             onClick={() => void submit('taken')}
             disabled={busy}
           >
-            已服 ✓
+            {t('med.taken')}
           </button>
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -397,7 +414,7 @@ export default function MedicationLogModal({
               onClick={() => void submit('late')}
               disabled={busy}
             >
-              延遲
+              {t('med.late')}
             </button>
             <button
               type="button"
@@ -406,7 +423,7 @@ export default function MedicationLogModal({
               onClick={() => void submit('missed')}
               disabled={busy}
             >
-              漏服
+              {t('med.missed')}
             </button>
           </div>
         </div>

@@ -11,6 +11,7 @@
 import { useState } from 'react';
 
 import type { ContactCardItem, MedCandidate } from '../core/assistant/AssistantService';
+import { useI18n } from '../i18n';
 
 /* ==================== 確認卡 ==================== */
 
@@ -33,17 +34,21 @@ export function VoiceConfirmCard({
   onConfirm,
   onEdit,
   busy,
-  title = '✓ 聽到：',
-  confirmLabel = '確認記錄',
-  editLabel = '改一改',
+  title,
+  confirmLabel,
+  editLabel,
 }: VoiceConfirmCardProps): JSX.Element {
+  const { t } = useI18n();
+  const titleText = title ?? t('voiceCard.confirmTitle');
+  const confirmText = confirmLabel ?? t('voiceCard.confirm');
+  const editText = editLabel ?? t('voiceCard.edit');
   return (
     <div
       data-testid="voice-confirm-card"
       className="card-elder mb-4 border-l-8 border-l-[var(--sc-ok)]"
       aria-label="確認記錄卡"
     >
-      <p className="text-2xl font-black text-[var(--sc-ok)]">{title}</p>
+      <p className="text-2xl font-black text-[var(--sc-ok)]">{titleText}</p>
       <p data-testid="voice-confirm-summary" className="mt-2 text-elder-body-lg font-bold leading-relaxed">
         {summary}
       </p>
@@ -55,7 +60,7 @@ export function VoiceConfirmCard({
           onClick={onConfirm}
           disabled={busy}
         >
-          {busy ? '記低緊……' : confirmLabel}
+          {busy ? t('voiceCard.saving') : confirmText}
         </button>
         <button
           type="button"
@@ -64,7 +69,7 @@ export function VoiceConfirmCard({
           onClick={onEdit}
           disabled={busy}
         >
-          {editLabel}
+          {editText}
         </button>
       </div>
     </div>
@@ -88,13 +93,14 @@ export function MedCandidatesCard({
   onNone,
   busy,
 }: MedCandidatesCardProps): JSX.Element {
+  const { t } = useI18n();
   return (
     <div
       data-testid="med-candidate-card"
       className="card-elder mb-4 border-l-8 border-l-[var(--sc-thinking)]"
       aria-label="揀藥卡"
     >
-      <p className="text-2xl font-black text-[var(--sc-ink)]">你講嘅係邊一種藥？</p>
+      <p className="text-2xl font-black text-[var(--sc-ink)]">{t('voiceCard.medQuestion')}</p>
       <div className="mt-3 flex flex-col gap-3">
         {candidates.map((c, i) => (
           <button
@@ -116,7 +122,7 @@ export function MedCandidatesCard({
           onClick={onNone}
           disabled={busy}
         >
-          都唔係
+          {t('voiceCard.none')}
         </button>
       </div>
     </div>
@@ -132,6 +138,7 @@ export interface ContactCardsProps {
 }
 
 export function ContactCards({ items, onNotify }: ContactCardsProps): JSX.Element {
+  const { t } = useI18n();
   const [busyId, setBusyId] = useState('');
 
   return (
@@ -149,7 +156,7 @@ export function ContactCards({ items, onNotify }: ContactCardsProps): JSX.Elemen
                 data-testid={`contact-call-${c.id}`}
                 className="btn-elder btn-primary w-full !min-h-16 text-2xl"
               >
-                📞 打俾{c.name}
+                {t('voiceCard.call', { name: c.name })}
               </a>
             )}
             <button
@@ -162,7 +169,7 @@ export function ContactCards({ items, onNotify }: ContactCardsProps): JSX.Elemen
                 void Promise.resolve(onNotify(c)).finally(() => setBusyId(''));
               }}
             >
-              {busyId === c.id ? '通知緊……' : '通知佢我唔舒服'}
+              {busyId === c.id ? t('voiceCard.notifying') : t('voiceCard.notify')}
             </button>
           </div>
         </div>

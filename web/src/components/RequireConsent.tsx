@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { getProvider } from '../data/DataProvider';
 import { tableNameOf } from '../types/entities';
 import type { AuditLog, Consent, ElderProfile } from '../types/entities';
+import { useI18n } from '../i18n';
 
 const CONSENT_STORAGE_KEY = 'scv.consent.v1';
 const CONSENT_TYPE = 'usage_consent';
@@ -70,6 +71,7 @@ async function persistConsent(): Promise<void> {
 
 /** 包裹需要同意先決嘅路由（老人端／家屬端）。 */
 export default function RequireConsent({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   const [state, setState] = useState<'checking' | 'needed' | 'granted'>('checking');
   const [agreeing, setAgreeing] = useState(false);
 
@@ -103,7 +105,7 @@ export default function RequireConsent({ children }: { children: ReactNode }) {
     return (
       <main className="flex min-h-[60vh] items-center justify-center">
         <p className="text-elder-body text-[var(--sc-ink-soft)]" role="status">
-          準備緊……
+          {t('consent.checking')}
         </p>
       </main>
     );
@@ -115,12 +117,12 @@ export default function RequireConsent({ children }: { children: ReactNode }) {
       className="mx-auto flex min-h-[70vh] w-full max-w-md flex-col justify-center gap-6 px-5 py-10"
     >
       <div className="card-elder flex flex-col gap-5">
-        <h1 className="text-elder-title font-serif-display">私隱與免責同意</h1>
-        <p className="text-elder-body leading-relaxed">{CONSENT_TEXT}</p>
+        <h1 className="text-elder-title font-serif-display">{t('consent.title')}</h1>
+        <p className="text-elder-body leading-relaxed">{t('consent.text')}</p>
         <ul className="list-disc space-y-2 pl-6 text-lg text-[var(--sc-ink-soft)]">
-          <li>本系統唔係醫生，唔會作出診斷。</li>
-          <li>如有不適請聯絡醫生或致電 999。</li>
-          <li>你可以隨時喺「Demo 重置」清除全部資料。</li>
+          <li>{t('consent.bullet1')}</li>
+          <li>{t('consent.bullet2')}</li>
+          <li>{t('consent.bullet3')}</li>
         </ul>
         <button
           type="button"
@@ -129,7 +131,7 @@ export default function RequireConsent({ children }: { children: ReactNode }) {
           onClick={() => void agree()}
           disabled={agreeing}
         >
-          {agreeing ? '記低緊……' : '我明白，同意繼續'}
+          {agreeing ? t('consent.agreeing') : t('consent.agree')}
         </button>
       </div>
     </main>

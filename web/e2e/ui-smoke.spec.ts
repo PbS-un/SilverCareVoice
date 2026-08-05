@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { login } from './helpers';
 
 /**
  * T6 UI 冒煙測試：
@@ -45,7 +46,7 @@ async function countStore(page: Page, store: string): Promise<number> {
 }
 
 test('角色選擇頁載入三個入口', async ({ page }) => {
-  await page.goto('/');
+  await login(page);
   await expect(page.getByTestId('role-elder')).toBeVisible();
   await expect(page.getByTestId('role-family')).toBeVisible();
   await expect(page.getByTestId('role-insights')).toBeVisible();
@@ -53,6 +54,7 @@ test('角色選擇頁載入三個入口', async ({ page }) => {
 });
 
 test('長者頁輸入「我今日有啲頭暈」出現回答氣泡且 SymptomRecord 寫入 DB', async ({ page }) => {
+  await login(page);
   await page.goto('/#/elder');
   await agreeConsentIfShown(page);
 
@@ -70,6 +72,7 @@ test('長者頁輸入「我今日有啲頭暈」出現回答氣泡且 SymptomRec
 });
 
 test('家屬提醒頁可見 seed alert', async ({ page }) => {
+  await login(page);
   await page.goto('/#/family/alerts');
   await agreeConsentIfShown(page);
   await expect(page.getByTestId('family-alert-item').first()).toBeVisible({ timeout: 15_000 });

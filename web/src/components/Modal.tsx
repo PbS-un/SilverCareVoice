@@ -2,6 +2,7 @@
  * 長者友善彈窗：大字、大按鈕、點背景可關閉。
  */
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useI18n } from '../i18n';
 
 interface ModalProps {
   title: string;
@@ -10,6 +11,7 @@ interface ModalProps {
 }
 
 export default function Modal({ title, onClose, children }: ModalProps) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export default function Modal({ title, onClose, children }: ModalProps) {
           <button
             type="button"
             onClick={onClose}
-            aria-label="關閉"
+            aria-label={t('modal.close')}
             className="btn-elder btn-ghost !min-h-12 !min-w-12 !p-2 text-lg leading-none"
           >
             ✕

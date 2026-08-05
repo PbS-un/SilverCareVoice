@@ -7,6 +7,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AppointmentModal from '../AppointmentModal';
+import { LanguageProvider } from '../../../i18n';
 import { getProvider } from '../../../data/DataProvider';
 import { seedData } from '../../../data/seed';
 import { tableNameOf } from '../../../types/entities';
@@ -31,12 +32,14 @@ async function listAppts(): Promise<Appointment[]> {
 
 function renderModal(props: { appointments?: Appointment[]; onClose?: () => void; onDone?: () => void } = {}) {
   return render(
-    <AppointmentModal
-      elderId={ELDER_ID}
-      appointments={props.appointments ?? []}
-      onClose={props.onClose ?? vi.fn()}
-      onDone={props.onDone ?? vi.fn()}
-    />,
+    <LanguageProvider>
+      <AppointmentModal
+        elderId={ELDER_ID}
+        appointments={props.appointments ?? []}
+        onClose={props.onClose ?? vi.fn()}
+        onDone={props.onDone ?? vi.fn()}
+      />
+    </LanguageProvider>,
   );
 }
 

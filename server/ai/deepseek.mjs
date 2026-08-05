@@ -94,8 +94,22 @@ const SYSTEM_PROMPT = `你是「銀髮一句通」的 AI 健康助理，服務�
 
 現在請處理用戶的訊息。`
 
+/** 選定語言指示（T1.4）：answer／detailedAnswer 必須用該語言輸出。 */
+const LOCALE_INSTRUCTIONS = {
+  'zh-HK': '',
+  'zh-CN':
+    '重要：answer 和 detailedAnswer 必須使用简体中文（可带口语化），语气亲切简短，最多 2 句。',
+  pt: 'IMPORTANTE: answer e detailedAnswer devem ser escritos em português, com tom amigável e curto (no máximo 2 frases).',
+  en: 'IMPORTANT: answer and detailedAnswer must be written in English, in a short and friendly tone (at most 2 sentences).',
+}
+
 function buildMessages(text, context, correction) {
-  const messages = [{ role: 'system', content: SYSTEM_PROMPT }]
+  const locale = typeof context?.locale === 'string' ? context.locale : 'zh-HK'
+  const localeInstruction = LOCALE_INSTRUCTIONS[locale] ?? ''
+  const systemContent = localeInstruction
+    ? `${SYSTEM_PROMPT}\n\n${localeInstruction}\n（上方範例只展示 JSON 結構與抽取方式，回覆語言以本指示為準。）`
+    : SYSTEM_PROMPT
+  const messages = [{ role: 'system', content: systemContent }]
   if (context && Object.keys(context).length > 0) {
     messages.push({
       role: 'system',

@@ -48,7 +48,9 @@ import type {
   RiskLevel,
   StructuredAnalysis,
 } from '../../types/ai';
+import type { AppLocale } from '../../i18n';
 import { screenHighRiskTerms, type SafetyScreenResult } from './safetyScreen';
+import { localizeFallbackAnswer, localizeFallbackDetailed } from './localize';
 import {
   localHybridEngine,
   MEDICATION_CANDIDATES_PLACEHOLDER,
@@ -157,6 +159,8 @@ export type PendingAction =
 export const MAX_PENDING_TURNS = 2;
 
 export interface AssistantContext extends LocalContext {
+  /** 目前選定語言（T1.4）：DeepSeek prompt 與本地回覆翻譯使用；缺省 zh-HK。 */
+  locale?: AppLocale;
   /** 輸入方式（決定 VitalRecord.source），預設 'text'；語音入口傳 'voice'。 */
   source?: VitalSource;
   /** 內部用：原始輸入文字（症狀記錄 description 用）。 */
@@ -1297,6 +1301,7 @@ export async function ask(
 ): Promise<AssistantResponse> {
   const provider = getProvider();
   const t = isoNow();
+  const locale: AppLocale = context.locale ?? 'zh-HK';
   const normalized = (text ?? '').trim();
   const persisted: Partial<Record<TableName, string[]>> = {};
   const ctx: AssistantContext = { ...context, originalText: normalized };
@@ -1317,11 +1322,16 @@ export async function ask(
   const finish = async (
     res: Omit<AssistantResponse, 'persisted'>,
   ): Promise<AssistantResponse> => {
+    // T1.4：最終 user-facing answer 按選定語言輸出（best-effort，缺模板保留原句）
+    const answer = localizeFallbackAnswer(res.answer, locale);
+    const detailedAnswer = res.detailedAnswer
+      ? localizeFallbackDetailed(res.detailedAnswer, locale)
+      : undefined;
     const assistantConv: Conversation = {
       id: newId(),
       elderId,
       role: 'assistant',
-      message: res.answer,
+      message: answer,
       intent: res.intent,
       createdAt: isoNow(),
       updatedAt: isoNow(),
@@ -1350,7 +1360,7 @@ export async function ask(
     await provider.put<AuditLog>(tableNameOf('AuditLog'), audit);
     addPersisted(persisted, tableNameOf('AuditLog'), audit.id);
 
-    return { ...res, persisted };
+    return { ...res, answer, ...(detailedAnswer ? { detailedAnswer } : {}), persisted };
   };
 
   // b. safety 先行：高風險詞 → urgent 路徑，唔調任何 LLM
@@ -1425,7 +1435,7 @@ export async function ask(
   let providerField: AssistantResponse['provider'];
   const reachable = await probeProxy();
   if (reachable) {
-    const proxyResult = await chatViaProxy(normalized, { userName: ctx.userName });
+    const proxyResult = await chatViaProxy(normalized, { userName: ctx.userName, locale });
     if (proxyResult.analysis && (proxyResult.provider === 'deepseek' || proxyResult.provider === 'safety')) {
       analysis = proxyResult.analysis;
       providerField = proxyResult.provider;

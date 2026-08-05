@@ -18,7 +18,10 @@ import { getProvider, enableSync } from './data/DataProvider';
 import { tableNameOf } from './types/entities';
 import { demoReset } from './data/demoReset';
 import { ensureKnowledgeLoaded } from './core/kb/search';
+import { LanguageProvider, useI18n } from './i18n';
 import RequireConsent from './components/RequireConsent';
+import RequireAuth from './components/RequireAuth';
+import LoginPage from './pages/LoginPage';
 import RoleSelect from './pages/RoleSelect';
 import ElderHome from './pages/ElderHome';
 import ElderHealth from './pages/ElderHealth';
@@ -30,8 +33,9 @@ import InsightsPage from './pages/InsightsPage';
 import ReportPage from './pages/ReportPage';
 import PrintBrief from './pages/PrintBrief';
 
-export default function App() {
+function AppRoutes() {
   const [ready, setReady] = useState(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     let live = true;
@@ -72,74 +76,118 @@ export default function App() {
           aria-hidden
           className="animate-breathe block h-16 w-16 rounded-full bg-care-idle shadow-lg"
         />
-        <h1 className="font-serif-display text-elder-title text-ink">銀髮一句通</h1>
+        <h1 className="font-serif-display text-elder-title text-ink">{t('app.loadingTitle')}</h1>
         <p className="text-elder-body text-[var(--sc-ink-soft)]" role="status">
-          載入中……
+          {t('app.loading')}
         </p>
       </main>
     );
   }
 
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<RoleSelect />} />
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
 
-        <Route
-          path="/elder"
-          element={
+      <Route
+        path="/"
+        element={
+          <RequireAuth>
+            <RoleSelect />
+          </RequireAuth>
+        }
+      />
+
+      <Route
+        path="/elder"
+        element={
+          <RequireAuth>
             <RequireConsent>
               <ElderHome />
             </RequireConsent>
-          }
-        />
-        <Route
-          path="/elder/health"
-          element={
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/elder/health"
+        element={
+          <RequireAuth>
             <RequireConsent>
               <ElderHealth />
             </RequireConsent>
-          }
-        />
+          </RequireAuth>
+        }
+      />
 
-        <Route
-          path="/family"
-          element={
+      <Route
+        path="/family"
+        element={
+          <RequireAuth>
             <RequireConsent>
               <FamilyHome />
             </RequireConsent>
-          }
-        />
-        <Route
-          path="/family/health"
-          element={
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/family/health"
+        element={
+          <RequireAuth>
             <RequireConsent>
               <FamilyHealth />
             </RequireConsent>
-          }
-        />
-        <Route
-          path="/family/alerts"
-          element={
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/family/alerts"
+        element={
+          <RequireAuth>
             <RequireConsent>
               <FamilyAlerts />
             </RequireConsent>
-          }
-        />
-        <Route
-          path="/family/report"
-          element={
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/family/report"
+        element={
+          <RequireAuth>
             <RequireConsent>
               <FamilyReport />
             </RequireConsent>
-          }
-        />
+          </RequireAuth>
+        }
+      />
 
-        <Route path="/insights" element={<InsightsPage />} />
-        <Route path="/report" element={<ReportPage />} />
-        <Route path="/print-brief" element={<PrintBrief />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </HashRouter>
+      <Route
+        path="/insights"
+        element={
+          <RequireAuth>
+            <InsightsPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/report"
+        element={
+          <RequireAuth>
+            <ReportPage />
+          </RequireAuth>
+        }
+      />
+      {/* /print-brief：公開例外（PDF 生成直接訪問） */}
+      <Route path="/print-brief" element={<PrintBrief />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <HashRouter>
+        <AppRoutes />
+      </HashRouter>
+    </LanguageProvider>
   );
 }

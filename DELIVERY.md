@@ -18,6 +18,11 @@
 
 ## 2. 功能清單
 
+### 本輪新增（T1 四語言／T2 自動朗讀／T3 Demo Login）
+- **Demo Login**：登入頁（tester / tester），sessionStorage 保持登入；未登入訪問受保護路由導向登入頁；`/print-brief` 保留公開例外（PDF 生成用）。
+- **四語言 UI**：繁體中文／简体中文／Português／English；登入頁與角色選擇頁即時切換、`localStorage` 持久化；AI 回覆（DeepSeek prompt + Local Hybrid 本地化）、ASR／TTS（zh-HK／zh-CN／pt-PT／en-US）跟隨語言。
+- **Elder AI 自動朗讀**：每條新 assistant final answer 自動播放一次（exactly once）；rerender／歷史載入／語言切換／返回頁面不重播；手動播放保留。
+
 ### 老人端（/elder、/elder/health）
 - 大麥克風語音輸入（ASR，4 狀態色）＋文字輸入（≥24px）雙通道
 - 一句輸入 → AI 回答氣泡（TTS 播放／再講多啲／provider 標記／免責提示）
@@ -82,8 +87,8 @@ Demo Reset → 同意頁 → /elder 輸入「我啱啱血壓158/95，仲有啲�
 | 10 | Safety flow（高風險攔截唔行 LLM） | **PASS** | Vitest `safetyScreen.test.ts`（15） |
 | 11 | Persistence（reload 後數據仍在） | **PASS** | E2E `persistence.spec.ts` |
 | 12 | Lint／Build | **PASS** | `tsc --noEmit` 零錯誤；`vite build` 成功（886 modules） |
-| 13 | Vitest 單元測試 | **PASS** | 實測 **17 files / 285 tests 全綠**（2026-08-05 最終整合驗證實測值） |
-| 14 | Playwright E2E | **PASS** | 實測 **16 passed**（30.5s） |
+| 13 | Vitest 單元測試 | **PASS** | 實測值見最終驗證報告（T1–T3 新增 login／i18n／localize／ElderHome autoplay 測試） |
+| 14 | Playwright E2E | **PASS** | 實測值見最終驗證報告（新增 login／language／elder-tts spec） |
 | 15 | PDF ≤ 5 頁 | **PASS** | pdf-lib 實測 `getPageCount() === 5`，A4（595×842pt） |
 | 16 | GitHub Pages 線上可達 | **PASS** | <https://pbs-un.github.io/SilverCareVoice/> 已上線 |
 | 17 | Supabase 雲端後端（Edge Function＋Postgres op-log/LWW＋Realtime） | **本地全量測試通過；雲端驗證待部署** | 代碼與遷移已就緒（`supabase/functions/silvercare`、`supabase/migrations/0001_sync_tables.sql`），本地全量測試（Vitest 285＋E2E 16）通過；線上驗證待完成 Supabase 部署與 GitHub vars 設定（步驟見 [supabase/DEPLOYMENT.md](./supabase/DEPLOYMENT.md)） |

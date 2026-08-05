@@ -6,8 +6,12 @@ import { useNavigate, Link } from 'react-router-dom';
 
 import { demoReset } from '../data/demoReset';
 import SyncBadge from '../components/SyncBadge';
+import LanguageSelector from '../components/LanguageSelector';
+import { useI18n } from '../i18n';
+import { setDemoAuthenticated } from '../lib/demoAuth';
 
 export default function RoleSelect() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -28,24 +32,27 @@ export default function RoleSelect() {
     <main className="bg-paper-grain mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-10 pt-6">
       <header className="mb-2 flex items-center justify-between">
         <span className="text-sm font-medium tracking-widest text-[var(--sc-muted)]">
-          SILVERCARE MACAU
+          {t('role.kicker')}
         </span>
-        <SyncBadge />
+        <span className="flex items-center gap-2">
+          <LanguageSelector compact />
+          <SyncBadge />
+        </span>
       </header>
 
       <section className="flex flex-1 flex-col justify-center gap-6 py-8">
         <h1 className="font-serif-display text-[2.6rem] font-black leading-tight text-ink">
-          銀髮一句通
+          {t('role.title')}
         </h1>
-        <p className="text-elder-body text-[var(--sc-ink-soft)]">
-          一句說話，記低健康。請選擇你的身份：
-        </p>
+        <p className="text-elder-body text-[var(--sc-ink-soft)]">{t('role.subtitle')}</p>
+
+        <LanguageSelector />
 
         <div className="flex flex-col gap-4">
           <button
             type="button"
             data-testid="role-elder"
-            aria-label="我是長者"
+            aria-label={t('role.elder')}
             onClick={() => navigate('/elder')}
             className="card-elder group flex items-center gap-4 text-left transition-transform hover:-translate-y-0.5"
           >
@@ -56,15 +63,15 @@ export default function RoleSelect() {
               👵
             </span>
             <span>
-              <span className="text-elder-title block">我是長者</span>
-              <span className="text-lg text-[var(--sc-ink-soft)]">講句嘢就幫你記低</span>
+              <span className="text-elder-title block">{t('role.elder')}</span>
+              <span className="text-lg text-[var(--sc-ink-soft)]">{t('role.elderDesc')}</span>
             </span>
           </button>
 
           <button
             type="button"
             data-testid="role-family"
-            aria-label="我是監護人"
+            aria-label={t('role.family')}
             onClick={() => navigate('/family')}
             className="card-elder group flex items-center gap-4 text-left transition-transform hover:-translate-y-0.5"
           >
@@ -75,15 +82,15 @@ export default function RoleSelect() {
               👨‍👩‍👧
             </span>
             <span>
-              <span className="text-elder-title block">我是監護人</span>
-              <span className="text-lg text-[var(--sc-ink-soft)]">查看及跟進長者健康情況</span>
+              <span className="text-elder-title block">{t('role.family')}</span>
+              <span className="text-lg text-[var(--sc-ink-soft)]">{t('role.familyDesc')}</span>
             </span>
           </button>
 
           <button
             type="button"
             data-testid="role-insights"
-            aria-label="數據洞察"
+            aria-label={t('role.insights')}
             onClick={() => navigate('/insights')}
             className="card-elder group flex items-center gap-4 text-left transition-transform hover:-translate-y-0.5"
           >
@@ -94,8 +101,8 @@ export default function RoleSelect() {
               📊
             </span>
             <span>
-              <span className="text-elder-title block">數據洞察</span>
-              <span className="text-lg text-[var(--sc-ink-soft)]">整體照護數據總覽</span>
+              <span className="text-elder-title block">{t('role.insights')}</span>
+              <span className="text-lg text-[var(--sc-ink-soft)]">{t('role.insightsDesc')}</span>
             </span>
           </button>
         </div>
@@ -106,7 +113,7 @@ export default function RoleSelect() {
             data-testid="link-report"
             className="font-bold text-[var(--sc-idle-deep)] underline underline-offset-4"
           >
-            查看可打印總報告
+            {t('role.reportLink')}
           </Link>
         </p>
       </section>
@@ -114,12 +121,12 @@ export default function RoleSelect() {
       <footer className="mt-6 border-t border-[var(--sc-line)] pt-4">
         {done ? (
           <p className="text-center text-lg font-bold text-[var(--sc-ok)]" role="status">
-            已重置為示範資料 ✓
+            {t('role.resetDone')}
           </p>
         ) : confirming ? (
           <div className="flex flex-col gap-3">
             <p className="text-center text-lg font-bold text-[var(--sc-urgent)]">
-              會清除全部記錄並還原示範資料，確定？
+              {t('role.resetConfirm')}
             </p>
             <div className="flex gap-3">
               <button
@@ -129,14 +136,14 @@ export default function RoleSelect() {
                 onClick={() => void doReset()}
                 disabled={resetting}
               >
-                {resetting ? '重置緊……' : '確定重置'}
+                {resetting ? t('role.resetting') : t('role.resetConfirmBtn')}
               </button>
               <button
                 type="button"
                 className="btn-elder btn-ghost flex-1"
                 onClick={() => setConfirming(false)}
               >
-                取消
+                {t('role.resetCancel')}
               </button>
             </div>
           </div>
@@ -147,10 +154,22 @@ export default function RoleSelect() {
             className="btn-elder btn-ghost mx-auto flex"
             onClick={() => setConfirming(true)}
           >
-            Demo 重置
+            {t('role.reset')}
           </button>
         )}
       </footer>
+
+      <button
+        type="button"
+        data-testid="logout-button"
+        className="mt-3 text-center text-base font-bold text-[var(--sc-muted)] underline underline-offset-4"
+        onClick={() => {
+          setDemoAuthenticated(false);
+          navigate('/login', { replace: true });
+        }}
+      >
+        {t('role.logout')}
+      </button>
     </main>
   );
 }

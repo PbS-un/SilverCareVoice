@@ -10,7 +10,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   ask,
-  HEALTH_DISCLAIMER,
   type AssistantResponse,
   type ContactCardItem,
   type OpenFormSuggestion,
@@ -25,6 +24,7 @@ import { speak, stopSpeaking } from '../services/speech/tts';
 import { notifyFamily, recordBloodPressure } from '../lib/manualEntry';
 import { useAsyncData, useDbVersion, useElderContext } from '../lib/hooks';
 import { greetingByHour, fmtTime, isToday } from '../lib/format';
+import { toSpeechLang, useI18n } from '../i18n';
 import BottomNav, { ELDER_NAV_ITEMS } from '../components/BottomNav';
 import Modal from '../components/Modal';
 import MedicationLogModal from '../components/modals/MedicationLogModal';
@@ -40,14 +40,15 @@ const MIC_STYLE: Record<MicState, string> = {
   done: 'bg-[var(--sc-ok)]',
 };
 
-const MIC_LABEL: Record<MicState, string> = {
-  idle: '按一下開始說話',
-  listening: '聽緊你講嘢……',
-  thinking: '諗緊……',
-  done: '答咗你啦',
+const MIC_LABEL_KEY: Record<MicState, string> = {
+  idle: 'elder.micIdle',
+  listening: 'elder.micListening',
+  thinking: 'elder.micThinking',
+  done: 'elder.micDone',
 };
 
 export default function ElderHome() {
+  const { t, locale } = useI18n();
   const dbVersion = useDbVersion();
   const ctx = useElderContext(dbVersion);
   const elderId = ctx?.elderId ?? '';
@@ -66,6 +67,8 @@ export default function ElderHome() {
   /** 門控提議／「改一改」帶入嘅表單預填。 */
   const [formPrefill, setFormPrefill] = useState<OpenFormSuggestion['prefill'] | undefined>(undefined);
   const [toast, setToast] = useState('');
+  /** 最後一次已自動播放嘅 assistant conversation id（exactly-once 防重播）。 */
+  const autoplayedConvRef = useRef<string | null>(null);
   const micStateRef = useRef<MicState>('idle');
   micStateRef.current = micState;
 
@@ -143,22 +146,30 @@ export default function ElderHome() {
       const res = await ask(elderId, msg, {
         source,
         userName: ctx?.elderName,
+        locale,
         ...(pending ? { pending } : {}),
       });
       setResponse(res);
       setMicState('done');
       if (res.riskLevel === 'urgent') setEmergencyOpen(true);
-      // 追問／確認／候選／聯絡卡 → 自動 TTS（先停再讀）
-      if (res.pending || res.confirmation || res.candidates || res.contactCard) {
+      // T2：每個「新」assistant final answer 自動朗讀一次（exactly once）。
+      // 用 assistant Conversation id 區分新舊——rerender／歷史載入／返回頁面
+      // 唔會再觸發（autoplay 只在 sendMessage 內發生）；下一個新 answer 再播。
+      const convKey = tableNameOf('Conversation');
+      const convIds = res.persisted?.[convKey];
+      const assistantConvId = convIds?.[convIds.length - 1];
+      if (assistantConvId && autoplayedConvRef.current !== assistantConvId) {
+        autoplayedConvRef.current = assistantConvId;
         stopSpeaking();
         const ok = speak(res.answer, {
+          lang: toSpeechLang(locale),
           onEnd: () => setSpeaking(false),
           onError: () => setSpeaking(false),
         });
         setSpeaking(ok);
       }
     } catch {
-      setErrorMsg('出咗啲問題，請再試一次。');
+      setErrorMsg(t('elder.error'));
       setMicState('idle');
     } finally {
       setSending(false);
@@ -206,8 +217,8 @@ export default function ElderHome() {
 
   /** 聯絡卡「通知佢我唔舒服」→ notifyFamily（現有 Alert 流程）。 */
   const onContactNotify = async (item: ContactCardItem): Promise<void> => {
-    await notifyFamily(elderId, `長者想通知${item.name}：佢覺得唔舒服，請盡快聯絡佢。`);
-    setToast(`已經通知咗${item.name} ✓`);
+    await notifyFamily(elderId, t('elder.notifyReason', { name: item.name }));
+    setToast(t('elder.notifyMsg', { name: item.name }));
   };
 
   const closeForm = (): void => {
@@ -229,22 +240,25 @@ export default function ElderHome() {
     }
     setInterim('');
     setMicState('listening');
-    startListening({
-      onInterim: (t) => setInterim(t),
-      onResult: (t) => {
-        setInterim('');
-        setText(t);
-        void sendMessage(t, 'voice');
+    startListening(
+      {
+        onInterim: (txt) => setInterim(txt),
+        onResult: (txt) => {
+          setInterim('');
+          setText(txt);
+          void sendMessage(txt, 'voice');
+        },
+        onError: (err) => {
+          setErrorMsg(err.message);
+          setInterim('');
+          setMicState('idle');
+        },
+        onEnd: () => {
+          if (micStateRef.current === 'listening') setMicState('idle');
+        },
       },
-      onError: (err) => {
-        setErrorMsg(err.message);
-        setInterim('');
-        setMicState('idle');
-      },
-      onEnd: () => {
-        if (micStateRef.current === 'listening') setMicState('idle');
-      },
-    });
+      toSpeechLang(locale),
+    );
   };
 
   useEffect(() => () => stopListening(), []);
@@ -259,6 +273,7 @@ export default function ElderHome() {
     }
     if (!response) return;
     const ok = speak(response.answer, {
+      lang: toSpeechLang(locale),
       onEnd: () => setSpeaking(false),
       onError: () => setSpeaking(false),
     });
@@ -278,7 +293,7 @@ export default function ElderHome() {
         {showRescue ? (
           <>
             <p className="text-elder-body text-[var(--sc-ink-soft)]" role="status">
-              咦，資料仲未載入到。試吓下面嘅方法啦：
+              {t('elder.rescue')}
             </p>
             <div className="flex w-full flex-col gap-3">
               <button
@@ -287,7 +302,7 @@ export default function ElderHome() {
                 className="btn-elder btn-primary w-full"
                 onClick={() => window.location.reload()}
               >
-                重新載入
+                {t('elder.reload')}
               </button>
               <button
                 type="button"
@@ -296,13 +311,13 @@ export default function ElderHome() {
                 onClick={() => void doRescueReset()}
                 disabled={rescuing}
               >
-                {rescuing ? '重置緊……' : 'Demo 重置'}
+                {rescuing ? t('role.resetting') : t('role.reset')}
               </button>
             </div>
           </>
         ) : (
           <p className="text-elder-body text-[var(--sc-ink-soft)]" role="status">
-            載入緊……
+            {t('elder.rescueLoading')}
           </p>
         )}
       </main>
@@ -316,16 +331,16 @@ export default function ElderHome() {
         <h1 className="font-serif-display text-elder-display text-ink">
           {ctx.elderName}，{greetingByHour()}！
         </h1>
-        <p className="mt-1 text-elder-body text-[var(--sc-ink-soft)]">今日有冇唔舒服？</p>
+        <p className="mt-1 text-elder-body text-[var(--sc-ink-soft)]">{t('elder.question')}</p>
       </header>
 
       {/* 麥克風（ASR 不支援時自動隱藏，文字輸入常駐） */}
       {speechOk && (
-        <section className="mb-6 flex flex-col items-center gap-3" aria-label="語音輸入">
+        <section className="mb-6 flex flex-col items-center gap-3" aria-label={t('elder.micLabel')}>
           <button
             type="button"
             data-testid="mic-button"
-            aria-label={MIC_LABEL[micState]}
+            aria-label={t(MIC_LABEL_KEY[micState])}
             onClick={toggleMic}
             className={`flex h-[8.5rem] w-[8.5rem] items-center justify-center rounded-full text-white shadow-xl transition-transform focus-visible:outline-offset-4 active:scale-95 ${MIC_STYLE[micState]} ${
               micState === 'listening' || micState === 'thinking' ? 'animate-breathe' : ''
@@ -337,7 +352,7 @@ export default function ElderHome() {
             </svg>
           </button>
           <p className="text-xl font-bold" aria-live="polite">
-            {interim || MIC_LABEL[micState]}
+            {interim || t(MIC_LABEL_KEY[micState])}
           </p>
         </section>
       )}
@@ -356,18 +371,18 @@ export default function ElderHome() {
           rows={2}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={'例如：我啱啱量血壓 138/82，\n食咗降血壓藥，今日有少少頭暈。'}
-          aria-label="文字輸入"
+          placeholder={t('elder.inputPlaceholder')}
+          aria-label={t('elder.inputAria')}
           className="min-h-[80px] w-full resize-none rounded-2xl border-2 border-[var(--sc-line)] bg-white px-4 py-3 text-elder-body outline-none focus:border-[var(--sc-idle)]"
         />
         <button
           type="submit"
           data-testid="send-button"
-          aria-label="發送"
+          aria-label={t('elder.sendAria')}
           className="btn-elder btn-primary shrink-0"
           disabled={sending || text.trim() === ''}
         >
-          {sending ? '……' : '發送'}
+          {sending ? t('elder.sending') : t('elder.send')}
         </button>
       </form>
 
@@ -379,7 +394,7 @@ export default function ElderHome() {
       )}
 
       {/* 快捷鍵 */}
-      <section aria-label="快捷功能" className="mb-6 grid grid-cols-3 gap-3">
+      <section aria-label={t('elder.quickAria')} className="mb-6 grid grid-cols-3 gap-3">
         <button
           type="button"
           data-testid="quick-bp"
@@ -387,7 +402,7 @@ export default function ElderHome() {
           onClick={() => setModal('bp')}
         >
           <span aria-hidden className="text-3xl">🩺</span>
-          量血壓
+          {t('elder.quickBp')}
         </button>
         <button
           type="button"
@@ -396,7 +411,7 @@ export default function ElderHome() {
           onClick={() => setModal('med')}
         >
           <span aria-hidden className="text-3xl">💊</span>
-          記錄食藥
+          {t('elder.quickMed')}
         </button>
         <button
           type="button"
@@ -405,7 +420,7 @@ export default function ElderHome() {
           onClick={() => setModal('family')}
         >
           <span aria-hidden className="text-3xl">📞</span>
-          搵家人
+          {t('elder.quickFamily')}
         </button>
       </section>
 
@@ -424,7 +439,7 @@ export default function ElderHome() {
           )}
           {response.sources && response.sources.length > 0 && (
             <p className="mt-3 text-base text-[var(--sc-ink-soft)]">
-              資料來源：{response.sources.join('、')}
+              {t('elder.sourceLabel')}{response.sources.join('、')}
             </p>
           )}
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -434,7 +449,7 @@ export default function ElderHome() {
               className="btn-elder btn-primary !min-h-12 !px-4 text-xl"
               onClick={toggleSpeak}
             >
-              {speaking ? '⏹ 停' : '🔊 播放'}
+              {speaking ? t('elder.stop') : t('elder.speak')}
             </button>
             {response.detailedAnswer && (
               <button
@@ -443,14 +458,18 @@ export default function ElderHome() {
                 className="btn-elder btn-ghost !min-h-12 !px-4 text-xl"
                 onClick={() => setShowDetail((v) => !v)}
               >
-                {showDetail ? '收埋' : '再講多啲'}
+                {showDetail ? t('elder.less') : t('elder.more')}
               </button>
             )}
             <span className="ml-auto rounded-full border border-[var(--sc-line)] px-3 py-1 text-base text-[var(--sc-ink-soft)]">
-              {response.provider === 'deepseek' ? 'DeepSeek' : response.provider === 'safety' ? '安全檢查' : '離線模式'}
+              {response.provider === 'deepseek'
+                ? t('elder.providerDeepseek')
+                : response.provider === 'safety'
+                  ? t('elder.providerSafety')
+                  : t('elder.providerLocal')}
             </span>
           </div>
-          <p className="mt-3 text-base text-[var(--sc-muted)]">{HEALTH_DISCLAIMER}</p>
+          <p className="mt-3 text-base text-[var(--sc-muted)]">{t('elder.disclaimer')}</p>
         </section>
       )}
 
@@ -482,10 +501,10 @@ export default function ElderHome() {
           onClick={() => openSuggestedForm(response.openForm!)}
         >
           {response.openForm.form === 'medication'
-            ? '📝 開藥物表單'
+            ? t('elder.openMedForm')
             : response.openForm.form === 'appointment'
-              ? '📝 開覆診表單'
-              : '📝 開血壓表單'}
+              ? t('elder.openApptForm')
+              : t('elder.openBpForm')}
         </button>
       )}
 
@@ -497,21 +516,21 @@ export default function ElderHome() {
       )}
 
       {/* 今日狀態卡（實算） */}
-      <section data-testid="today-status" className="card-elder mb-6" aria-label="今日狀態">
-        <h2 className="mb-2 text-xl font-bold text-[var(--sc-ink-soft)]">今日狀態</h2>
+      <section data-testid="today-status" className="card-elder mb-6" aria-label={t('elder.todayStatus')}>
+        <h2 className="mb-2 text-xl font-bold text-[var(--sc-ink-soft)]">{t('elder.todayStatus')}</h2>
         {attentionCount === 0 ? (
-          <p className="text-elder-body font-bold text-[var(--sc-ok)]">大致正常 ✓</p>
+          <p className="text-elder-body font-bold text-[var(--sc-ok)]">{t('elder.todayNormal')}</p>
         ) : (
           <p className="text-elder-body font-bold text-[var(--sc-thinking)]">
-            有 {attentionCount} 件事要留意
+            {t('elder.todayAttention', { n: attentionCount })}
           </p>
         )}
-        {familyKnows && <p className="mt-1 text-xl text-[var(--sc-ink-soft)]">家人已經知道 ✓</p>}
+        {familyKnows && <p className="mt-1 text-xl text-[var(--sc-ink-soft)]">{t('elder.familyKnows')}</p>}
       </section>
 
       {/* 歷史對話 */}
-      <section aria-label="歷史對話" className="mb-4">
-        <h2 className="mb-3 text-elder-title font-serif-display">之前傾過</h2>
+      <section aria-label={t('elder.history')} className="mb-4">
+        <h2 className="mb-3 text-elder-title font-serif-display">{t('elder.history')}</h2>
         <div
           data-testid="conversation-history"
           className="flex max-h-72 flex-col gap-3 overflow-y-auto rounded-2xl border border-[var(--sc-line)] bg-white/60 p-4"
@@ -529,13 +548,13 @@ export default function ElderHome() {
                 }`}
               >
                 <span className="mb-0.5 block text-sm opacity-75">
-                  {c.role === 'elder' ? '你' : '助手'} · {fmtTime(c.createdAt)}
+                  {c.role === 'elder' ? t('elder.historyYou') : t('elder.historyAssistant')} · {fmtTime(c.createdAt)}
                 </span>
                 {c.message}
               </div>
             ))}
           {(conversations ?? []).filter((c) => c.role !== 'system').length === 0 && (
-            <p className="text-xl text-[var(--sc-muted)]">仲未傾過嘢，由上面開始啦。</p>
+            <p className="text-xl text-[var(--sc-muted)]">{t('elder.historyEmpty')}</p>
           )}
         </div>
       </section>
@@ -577,7 +596,7 @@ export default function ElderHome() {
           onClose={closeForm}
           onDone={() => {
             closeForm();
-            onFamilyNotified('已記低覆診 ✓');
+            onFamilyNotified(t('elderHealth.savedAppointment'));
           }}
         />
       )}
@@ -605,7 +624,7 @@ export default function ElderHome() {
           onClose={() => setEmergencyOpen(false)}
           onNotified={() => {
             setEmergencyOpen(false);
-            onFamilyNotified('已經通知家人 ✓');
+            onFamilyNotified(t('elder.notified'));
           }}
         />
       )}
@@ -632,6 +651,7 @@ function BloodPressureModal({
   onClose: () => void;
   onDone: (msg: string) => void;
 }) {
+  const { t } = useI18n();
   const [sys, setSys] = useState(initialSystolic ?? '');
   const [dia, setDia] = useState(initialDiastolic ?? '');
   const [busy, setBusy] = useState(false);
@@ -641,17 +661,17 @@ function BloodPressureModal({
     const s = Number(sys);
     const d = Number(dia);
     if (!s || !d || s < 50 || s > 260 || d < 30 || d > 160) {
-      setErr('請輸入合理數字（收縮壓 50–260、舒張壓 30–160）');
+      setErr(t('bp.invalid'));
       return;
     }
     setBusy(true);
     try {
       const { events } = await recordBloodPressure(elderId, s, d);
       const worst = events.some((e) => e.severity === 'urgent')
-        ? '已記低。血壓偏高，已經通知家人！'
+        ? t('bp.doneUrgent')
         : events.length > 0
-          ? '已記低。有啲數值要留意，家人會收到提醒。'
-          : '已記低你嘅血壓 ✓';
+          ? t('bp.doneAttention')
+          : t('bp.doneNormal');
       onDone(worst);
     } finally {
       setBusy(false);
@@ -659,10 +679,10 @@ function BloodPressureModal({
   };
 
   return (
-    <Modal title="量血壓" onClose={onClose}>
+    <Modal title={t('bp.title')} onClose={onClose}>
       <div className="flex flex-col gap-4">
         <label className="flex flex-col gap-1 text-xl font-bold">
-          收縮壓（上壓）
+          {t('vital.systolic')}
           <input
             data-testid="bp-systolic-input"
             type="number"
@@ -670,11 +690,11 @@ function BloodPressureModal({
             value={sys}
             onChange={(e) => setSys(e.target.value)}
             className="min-h-14 rounded-xl border-2 border-[var(--sc-line)] px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
-            aria-label="收縮壓"
+            aria-label={t('vital.systolic')}
           />
         </label>
         <label className="flex flex-col gap-1 text-xl font-bold">
-          舒張壓（下壓）
+          {t('vital.diastolic')}
           <input
             data-testid="bp-diastolic-input"
             type="number"
@@ -682,7 +702,7 @@ function BloodPressureModal({
             value={dia}
             onChange={(e) => setDia(e.target.value)}
             className="min-h-14 rounded-xl border-2 border-[var(--sc-line)] px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
-            aria-label="舒張壓"
+            aria-label={t('vital.diastolic')}
           />
         </label>
         {err && <p role="alert" className="text-xl text-[var(--sc-urgent)]">{err}</p>}
@@ -693,7 +713,7 @@ function BloodPressureModal({
           onClick={() => void submit()}
           disabled={busy}
         >
-          {busy ? '記低緊……' : '記低'}
+          {busy ? t('bp.saving') : t('bp.save')}
         </button>
       </div>
     </Modal>
@@ -715,20 +735,21 @@ function FamilyModal({
   onClose: () => void;
   onDone: (msg: string) => void;
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
 
   const notify = async (): Promise<void> => {
     setBusy(true);
     try {
-      await notifyFamily(elderId, `${caregiverName}，長者想聯絡你，請盡快回覆。`);
-      onDone('已經通知家人 ✓');
+      await notifyFamily(elderId, t('familyModal.msg', { name: caregiverName }));
+      onDone(t('elder.notified'));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title="搵家人" onClose={onClose}>
+    <Modal title={t('familyModal.title')} onClose={onClose}>
       <div className="flex flex-col gap-4">
         <div className="rounded-xl bg-[var(--sc-idle-soft)] p-4">
           <p className="text-elder-body font-bold">
@@ -737,7 +758,7 @@ function FamilyModal({
           </p>
           {caregiverPhone && (
             <p className="mt-1 text-xl">
-              電話：
+              {t('familyModal.phone')}
               <a
                 href={`tel:${caregiverPhone}`}
                 className="font-bold text-[var(--sc-idle-deep)] underline underline-offset-4"
@@ -754,7 +775,7 @@ function FamilyModal({
           onClick={() => void notify()}
           disabled={busy}
         >
-          {busy ? '通知緊……' : '通知家人'}
+          {busy ? t('familyModal.notifying') : t('familyModal.notify')}
         </button>
       </div>
     </Modal>
@@ -774,6 +795,7 @@ function EmergencyOverlay({
   onClose: () => void;
   onNotified: () => void;
 }) {
+  const { t } = useI18n();
   const [showCall, setShowCall] = useState(false);
   const [busy, setBusy] = useState(false);
   const [alreadyAlert] = useState(Boolean(response.alertId));
@@ -797,12 +819,12 @@ function EmergencyOverlay({
       data-testid="emergency-overlay"
       role="alertdialog"
       aria-modal="true"
-      aria-label="緊急提醒"
+      aria-label={t('emergency.title')}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--sc-urgent)] p-6"
     >
       <div className="flex w-full max-w-md flex-col items-center gap-6 text-white">
         <span aria-hidden className="animate-breathe text-7xl">⚠️</span>
-        <h2 className="text-center font-serif-display text-4xl font-black">緊急提醒</h2>
+        <h2 className="text-center font-serif-display text-4xl font-black">{t('emergency.title')}</h2>
         <p className="text-center text-elder-body-lg leading-relaxed">{response.answer}</p>
         {response.detailedAnswer && (
           <p className="text-center text-xl leading-relaxed opacity-90">{response.detailedAnswer}</p>
@@ -817,7 +839,11 @@ function EmergencyOverlay({
               onClick={() => void notify()}
               disabled={busy}
             >
-              {busy ? '通知緊……' : alreadyAlert ? '家人已收到通知 ✓' : '通知家人'}
+              {busy
+                ? t('familyModal.notifying')
+                : alreadyAlert
+                  ? t('emergency.familyNotified')
+                  : t('emergency.notifyFamily')}
             </button>
             <button
               type="button"
@@ -825,19 +851,19 @@ function EmergencyOverlay({
               className="btn-elder w-full border-2 border-white bg-transparent text-white"
               onClick={() => setShowCall(true)}
             >
-              緊急求助
+              {t('emergency.call')}
             </button>
             <button
               type="button"
               className="btn-elder w-full bg-black/20 text-white"
               onClick={onClose}
             >
-              我冇事，關閉
+              {t('emergency.close')}
             </button>
           </div>
         ) : (
           <div className="flex w-full flex-col gap-3">
-            <p className="text-center text-xl">澳門緊急求助電話（請自行撥打）：</p>
+            <p className="text-center text-xl">{t('emergency.macaoNumber')}</p>
             <a
               href="tel:999"
               data-testid="emergency-999"
@@ -856,11 +882,11 @@ function EmergencyOverlay({
               className="btn-elder w-full bg-black/20 text-white"
               onClick={() => setShowCall(false)}
             >
-              返回
+              {t('emergency.back')}
             </button>
           </div>
         )}
-        <p className="text-center text-base opacity-80">{HEALTH_DISCLAIMER}</p>
+        <p className="text-center text-base opacity-80">{t('elder.disclaimer')}</p>
       </div>
     </div>
   );

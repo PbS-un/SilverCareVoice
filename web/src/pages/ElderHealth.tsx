@@ -19,13 +19,15 @@ import { tableNameOf } from '../types/entities';
 import type { Appointment, VitalRecord, VitalType } from '../types/entities';
 import { recordBloodPressure, recordSingleVital } from '../lib/manualEntry';
 import { useAsyncData, useDbVersion, useElderContext } from '../lib/hooks';
-import { fmtAppointmentDate, fmtDate, fmtShortDate, VITAL_LABELS } from '../lib/format';
+import { fmtAppointmentDate, fmtDate, fmtShortDate } from '../lib/format';
+import { useI18n } from '../i18n';
 import BottomNav, { ELDER_NAV_ITEMS } from '../components/BottomNav';
 import AppointmentModal from '../components/modals/AppointmentModal';
 
 const TYPES: VitalType[] = ['blood_pressure', 'blood_glucose', 'heart_rate', 'weight'];
 
 export default function ElderHealth() {
+  const { t } = useI18n();
   const dbVersion = useDbVersion();
   const ctx = useElderContext(dbVersion);
   const elderId = ctx?.elderId ?? '';
@@ -61,31 +63,31 @@ export default function ElderHealth() {
 
   return (
     <main className="bg-paper-grain mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-28 pt-6">
-      <h1 className="mb-5 font-serif-display text-elder-display text-ink">我的記錄</h1>
+      <h1 className="mb-5 font-serif-display text-elder-display text-ink">{t('elderHealth.title')}</h1>
 
       {/* 類型切換 */}
-      <div role="tablist" aria-label="記錄類型" className="mb-5 grid grid-cols-4 gap-2">
-        {TYPES.map((t) => (
+      <div role="tablist" aria-label={t('elderHealth.tabsAria')} className="mb-5 grid grid-cols-4 gap-2">
+        {TYPES.map((vt) => (
           <button
-            key={t}
+            key={vt}
             type="button"
             role="tab"
-            aria-selected={type === t}
-            onClick={() => setType(t)}
+            aria-selected={type === vt}
+            onClick={() => setType(vt)}
             className={`btn-elder !min-h-12 !px-2 text-lg ${
-              type === t ? 'btn-primary' : 'btn-ghost'
+              type === vt ? 'btn-primary' : 'btn-ghost'
             }`}
           >
-            {VITAL_LABELS[t]}
+            {t(`vital.${vt}`)}
           </button>
         ))}
       </div>
 
       {/* 趨勢小圖 */}
-      <section className="card-elder mb-5" aria-label={`${VITAL_LABELS[type]}趨勢`}>
-        <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">最近趨勢</h2>
+      <section className="card-elder mb-5" aria-label={t('elderHealth.trendAria', { label: t(`vital.${type}`) })}>
+        <h2 className="mb-3 text-xl font-bold text-[var(--sc-ink-soft)]">{t('elderHealth.trend')}</h2>
         {chartData.length === 0 ? (
-          <p className="text-xl text-[var(--sc-muted)]">未有記錄</p>
+          <p className="text-xl text-[var(--sc-muted)]">{t('elderHealth.noRecords')}</p>
         ) : (
           <div data-testid="elder-vital-chart" className="h-44 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -97,7 +99,7 @@ export default function ElderHealth() {
                 <Line
                   type="monotone"
                   dataKey="value"
-                  name={type === 'blood_pressure' ? '上壓' : VITAL_LABELS[type]}
+                  name={type === 'blood_pressure' ? t('vital.systolicShort') : t(`vital.${type}`)}
                   stroke="var(--sc-idle)"
                   strokeWidth={3}
                   dot={{ r: 3 }}
@@ -106,7 +108,7 @@ export default function ElderHealth() {
                   <Line
                     type="monotone"
                     dataKey="value2"
-                    name="下壓"
+                    name={t('vital.diastolicShort')}
                     stroke="var(--sc-ok)"
                     strokeWidth={3}
                     dot={{ r: 3 }}
@@ -132,8 +134,8 @@ export default function ElderHealth() {
       )}
 
       {/* 記錄列表 */}
-      <section aria-label="記錄列表" className="mt-5">
-        <h2 className="mb-3 text-elder-title font-serif-display">記錄</h2>
+      <section aria-label={t('elderHealth.recordsAria')} className="mt-5">
+        <h2 className="mb-3 text-elder-title font-serif-display">{t('elderHealth.records')}</h2>
         <ul data-testid="vital-list" className="flex flex-col gap-2">
           {(vitals ?? []).slice(0, 15).map((v) => (
             <li key={v.id} className="card-elder flex items-center justify-between !py-3">
@@ -146,14 +148,14 @@ export default function ElderHealth() {
             </li>
           ))}
           {(vitals ?? []).length === 0 && (
-            <li className="text-xl text-[var(--sc-muted)]">未有記錄，喺上面加一筆啦。</li>
+            <li className="text-xl text-[var(--sc-muted)]">{t('elderHealth.noRecordsHint')}</li>
           )}
         </ul>
       </section>
 
       {/* 覆診 */}
-      <section aria-label="覆診預約" className="mt-8">
-        <h2 className="mb-3 text-elder-title font-serif-display">覆診</h2>
+      <section aria-label={t('elderHealth.appointmentsAria')} className="mt-8">
+        <h2 className="mb-3 text-elder-title font-serif-display">{t('elderHealth.appointments')}</h2>
         <ul data-testid="appointment-list" className="mb-4 flex flex-col gap-2">
           {(appointments ?? []).map((a) => (
             <li key={a.id} className="card-elder !py-3">
@@ -169,7 +171,7 @@ export default function ElderHealth() {
             </li>
           ))}
           {(appointments ?? []).length === 0 && (
-            <li className="text-xl text-[var(--sc-muted)]">未有覆診預約。</li>
+            <li className="text-xl text-[var(--sc-muted)]">{t('elderHealth.noAppointments')}</li>
           )}
         </ul>
         <button
@@ -178,7 +180,7 @@ export default function ElderHealth() {
           onClick={() => setApptOpen(true)}
           className="btn-elder btn-primary w-full"
         >
-          ＋ 新增覆診
+          {t('elderHealth.addAppointment')}
         </button>
       </section>
 
@@ -187,7 +189,7 @@ export default function ElderHealth() {
           elderId={elderId}
           appointments={appointments ?? []}
           onClose={() => setApptOpen(false)}
-          onDone={() => setToast('已記低覆診 ✓')}
+          onDone={() => setToast(t('elderHealth.savedAppointment'))}
         />
       )}
 
@@ -207,6 +209,7 @@ function VitalAddForm({
   type: VitalType;
   onDone: (msg: string) => void;
 }) {
+  const { t } = useI18n();
   const [a, setA] = useState('');
   const [b, setB] = useState('');
   const [busy, setBusy] = useState(false);
@@ -216,7 +219,7 @@ function VitalAddForm({
     const na = Number(a);
     const nb = Number(b);
     if (!na || (type === 'blood_pressure' && !nb)) {
-      setErr('請輸入數字');
+      setErr(t('elderHealth.enterNumber'));
       return;
     }
     setErr('');
@@ -229,7 +232,7 @@ function VitalAddForm({
       }
       setA('');
       setB('');
-      onDone(`已記低${VITAL_LABELS[type]} ✓`);
+      onDone(t('elderHealth.savedVital', { label: t(`vital.${type}`) }));
     } finally {
       setBusy(false);
     }
@@ -243,15 +246,17 @@ function VitalAddForm({
         void submit();
       }}
     >
-      <h2 className="text-xl font-bold text-[var(--sc-ink-soft)]">新增{VITAL_LABELS[type]}</h2>
+      <h2 className="text-xl font-bold text-[var(--sc-ink-soft)]">
+        {t('elderHealth.addVital', { label: t(`vital.${type}`) })}
+      </h2>
       <div className="flex gap-3">
         <input
           type="number"
           inputMode="decimal"
           value={a}
           onChange={(e) => setA(e.target.value)}
-          placeholder={type === 'blood_pressure' ? '上壓' : '數值'}
-          aria-label={type === 'blood_pressure' ? '收縮壓' : VITAL_LABELS[type]}
+          placeholder={type === 'blood_pressure' ? t('vital.systolicShort') : t('vital.value')}
+          aria-label={type === 'blood_pressure' ? t('vital.systolic') : t(`vital.${type}`)}
           className="min-h-14 w-full rounded-xl border-2 border-[var(--sc-line)] px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
         />
         {type === 'blood_pressure' && (
@@ -260,15 +265,15 @@ function VitalAddForm({
             inputMode="decimal"
             value={b}
             onChange={(e) => setB(e.target.value)}
-            placeholder="下壓"
-            aria-label="舒張壓"
+            placeholder={t('vital.diastolicShort')}
+            aria-label={t('vital.diastolic')}
             className="min-h-14 w-full rounded-xl border-2 border-[var(--sc-line)] px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
           />
         )}
       </div>
       {err && <p role="alert" className="text-xl text-[var(--sc-urgent)]">{err}</p>}
       <button type="submit" className="btn-elder btn-primary w-full" disabled={busy}>
-        {busy ? '記低緊……' : '記低'}
+        {busy ? t('bp.saving') : t('bp.save')}
       </button>
     </form>
   );
