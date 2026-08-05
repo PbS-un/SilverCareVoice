@@ -46,8 +46,6 @@ export default function RoleSelect() {
         </h1>
         <p className="text-elder-body text-[var(--sc-ink-soft)]">{t('role.subtitle')}</p>
 
-        <LanguageSelector />
-
         <div className="flex flex-col gap-4">
           <button
             type="button"

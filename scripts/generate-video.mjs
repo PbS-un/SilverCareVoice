@@ -97,7 +97,7 @@ async function setSubtitle(page, text) {
         'position:fixed;left:0;right:0;bottom:96px;z-index:99999;display:flex;justify-content:center;pointer-events:none;';
       const box = document.createElement('div');
       box.style.cssText =
-        'background:rgba(0,0,0,0.72);color:#fff;font-family:"Microsoft JhengHei","Noto Sans TC",sans-serif;' +
+        'background:rgba(0,0,0,0.72);color:#fff;font-family:"Microsoft JhengHei","Microsoft YaHei","Noto Sans TC","Noto Sans SC",sans-serif;' +
         'font-size:19px;font-weight:700;line-height:1.55;padding:9px 16px;border-radius:10px;' +
         'max-width:90%;text-align:center;word-break:break-word;';
       el.appendChild(box);
@@ -255,13 +255,13 @@ async function main() {
     await sleep(1_200);
 
     /* 3) 四語言切換展示（最後回繁體中文） */
-    await page.getByTestId('lang-en').click();
+    await page.getByTestId('language-selector').selectOption('en');
     await sleep(1_400);
-    await page.getByTestId('lang-pt').click();
+    await page.getByTestId('language-selector').selectOption('pt');
     await sleep(1_400);
-    await page.getByTestId('lang-zh-CN').click();
+    await page.getByTestId('language-selector').selectOption('zh-CN');
     await sleep(1_400);
-    await page.getByTestId('lang-zh-HK').click();
+    await page.getByTestId('language-selector').selectOption('zh-HK');
     await sleep(700);
     await mark('languages');
     await sleep(1_600);

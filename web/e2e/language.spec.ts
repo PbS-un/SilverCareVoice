@@ -12,15 +12,15 @@ test('四語言切換即時生效，refresh 保留', async ({ page }) => {
   await expect(page.getByText('我是長者')).toBeVisible();
 
   // 简体中文
-  await page.getByTestId('lang-zh-CN').click();
+  await page.getByTestId('language-selector').selectOption('zh-CN');
   await expect(page.getByText('我是长者')).toBeVisible();
 
   // Português
-  await page.getByTestId('lang-pt').click();
+  await page.getByTestId('language-selector').selectOption('pt');
   await expect(page.getByText('Sou idoso(a)')).toBeVisible();
 
   // English
-  await page.getByTestId('lang-en').click();
+  await page.getByTestId('language-selector').selectOption('en');
   await expect(page.getByText('I am a senior')).toBeVisible();
   await expect(page.getByText('Demo Reset')).toBeVisible();
 

@@ -29,10 +29,11 @@ const PAGE_STYLE = `
     break-after: page;
     background: #fbfaf7;
     color: #1f2937;
-    font-family: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
+    font-family: 'Noto Sans TC', 'Noto Sans SC', 'PingFang TC', 'PingFang SC',
+      'Microsoft JhengHei', 'Microsoft YaHei', system-ui, sans-serif;
   }
   .brief-page:last-child { page-break-after: auto; break-after: auto; }
-  .brief-serif { font-family: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif; }
+  .brief-serif { font-family: 'Noto Serif TC', 'Noto Serif SC', 'Songti TC', 'PMingLiU', 'SimSun', serif; }
   .brief-rule { border-top: 2px solid #1f2937; }
   .brief-kicker {
     font-size: 9pt; letter-spacing: 0.35em; font-weight: 700;

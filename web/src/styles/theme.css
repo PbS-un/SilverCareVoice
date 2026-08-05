@@ -31,11 +31,13 @@
   --sc-font-title: 2rem;       /* 32px 標題（≥28px 規範） */
   --sc-font-display: 2.5rem;   /* 40px 顯示級 */
 
-  /* ---- 字體堆疊：繁中端正字 ---- */
-  --sc-font-sans: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei',
+  /* ---- 字體堆疊：同時支援繁中／簡中（TC 優先，SC／YaHei 兜底） ---- */
+  --sc-font-sans: 'Noto Sans TC', 'Noto Sans SC', 'PingFang TC', 'PingFang SC',
+    'Microsoft JhengHei', 'Microsoft YaHei',
     system-ui, -apple-system, sans-serif;
   /* 標題／品牌：楷宋感襯線，帶出報刊式溫暖 */
-  --sc-font-serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
+  --sc-font-serif: 'Noto Serif TC', 'Noto Serif SC', 'Songti TC', 'PMingLiU',
+    'SimSun', serif;
 
   /* ---- 觸控與圓角 ---- */
   --sc-tap-target: 3.5rem;     /* ≥56px 觸控目標 */
@@ -63,6 +65,14 @@
     background-color: var(--sc-paper);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  /* 簡中語言下改用簡中字型（Noto Sans SC／微軟雅黑），確保簡體字形正確 */
+  :lang(zh-CN) {
+    --sc-font-sans: 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC',
+      'Noto Sans TC', 'Microsoft JhengHei', system-ui, -apple-system, sans-serif;
+    --sc-font-serif: 'Noto Serif SC', 'SimSun', 'Noto Serif TC', 'Songti TC',
+      serif;
   }
 
   /* 焦點可見性：粗框、高對比 */

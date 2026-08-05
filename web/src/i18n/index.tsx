@@ -13,6 +13,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -105,6 +106,16 @@ const I18nContext = createContext<I18nValue | null>(null);
 /** 語言 Provider：包住 App 全域，localStorage 持久化、即時切換。 */
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<AppLocale>(readLocale);
+
+  // 同步 <html lang>，令 CSS :lang(zh-CN) 字型切換生效（簡繁字形正確）
+  useEffect(() => {
+    try {
+      document.documentElement.lang =
+        locale === 'zh-HK' ? 'zh-Hant-MO' : locale === 'zh-CN' ? 'zh-CN' : locale === 'pt' ? 'pt' : 'en';
+    } catch {
+      /* 非瀏覽器環境忽略 */
+    }
+  }, [locale]);
 
   const setLocale = useCallback((next: AppLocale): void => {
     setLocaleState(next);
