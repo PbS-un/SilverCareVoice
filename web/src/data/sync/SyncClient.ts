@@ -287,28 +287,31 @@ export class SyncClient {
   private async connectCloud(): Promise<void> {
     if (this.stopped || this.unauthorized) return;
     const token = getSyncToken();
+    if (!token) {
+      // 未配對訪客（無 syncToken）：不建 Realtime 頻道、不啟動 3 秒兜底輪詢，
+      // 避免無意義的 401 請求風暴；已配對路徑不變（頻道 + 3 秒兜底）。
+      return;
+    }
     try {
-      if (token) {
-        const room = await cloudRoomId(token);
+      const room = await cloudRoomId(token);
+      if (this.stopped) return;
+      const projectUrl = realtimeUrl();
+      if (projectUrl) {
+        const { createClient } = await import('@supabase/supabase-js');
         if (this.stopped) return;
-        const projectUrl = realtimeUrl();
-        if (projectUrl) {
-          const { createClient } = await import('@supabase/supabase-js');
-          if (this.stopped) return;
-          const client = createClient(projectUrl, anonKey(), {
-            auth: { persistSession: false, autoRefreshToken: false },
-          });
-          this.supabase = client;
-          const channel = client.channel(`scv-sync-${room}`);
-          channel.on('broadcast', { event: 'change' }, () => {
-            void this.catchUpOnce();
-          });
-          await channel.subscribe();
-          if (this.stopped) return;
-          this.cloudChannel = channel;
-        } else {
-          console.warn('[sync] 雲端模式：無法推導 Supabase 項目 URL，僅以 3s 兜底 interval 補漏');
-        }
+        const client = createClient(projectUrl, anonKey(), {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        this.supabase = client;
+        const channel = client.channel(`scv-sync-${room}`);
+        channel.on('broadcast', { event: 'change' }, () => {
+          void this.catchUpOnce();
+        });
+        await channel.subscribe();
+        if (this.stopped) return;
+        this.cloudChannel = channel;
+      } else {
+        console.warn('[sync] 雲端模式：無法推導 Supabase 項目 URL，僅以 3s 兜底 interval 補漏');
       }
       this.onConnected?.(); // 觸發 Outbox flush（對齊 WS hello_ok 行為）
     } catch {

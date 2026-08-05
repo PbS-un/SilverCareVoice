@@ -5,16 +5,21 @@
 import { useEffect, useState } from 'react';
 
 import { enableSync } from '../data/DataProvider';
+import { getSyncToken } from '../data/sync/wire';
 
 export default function SyncBadge() {
   const [synced, setSynced] = useState<boolean | null>(null);
+  const [paired, setPaired] = useState(true);
 
   useEffect(() => {
     let live = true;
     const check = (): void => {
       enableSync()
         .then((mode) => {
-          if (live) setSynced(mode === 'sync');
+          if (live) {
+            setSynced(mode === 'sync');
+            setPaired(getSyncToken() !== '');
+          }
         })
         .catch(() => {
           if (live) setSynced(false);
@@ -36,9 +41,9 @@ export default function SyncBadge() {
     >
       <span
         aria-hidden
-        className={`status-dot ${synced === true ? 'status-ok' : 'status-muted'}`}
+        className={`status-dot ${synced === true && paired ? 'status-ok' : 'status-muted'}`}
       />
-      {synced === true ? '已連接同步伺服器' : '離線模式'}
+      {synced === true ? (paired ? '已連接同步伺服器' : '單機模式') : '離線模式'}
     </span>
   );
 }

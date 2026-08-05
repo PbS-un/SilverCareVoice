@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ask, HEALTH_DISCLAIMER, type AssistantResponse } from '../core/assistant/AssistantService';
 import { getProvider } from '../data/DataProvider';
+import { demoReset } from '../data/demoReset';
 import { tableNameOf } from '../types/entities';
 import type {
   Alert,
@@ -65,6 +66,30 @@ export default function ElderHome() {
   const [toast, setToast] = useState('');
   const micStateRef = useRef<MicState>('idle');
   micStateRef.current = micState;
+
+  /* ---------------- 逃生艙（避免任何情境下永久轉圈） ---------------- */
+  // 長者上下文持續為空超過 8 秒（如雲端未配對訪客資料未到位）時，
+  // 呈現可操作狀態：「重新載入」與「Demo 重置」。
+  const [showRescue, setShowRescue] = useState(false);
+  const [rescuing, setRescuing] = useState(false);
+
+  useEffect(() => {
+    if (ctx) {
+      setShowRescue(false);
+      return;
+    }
+    const t = window.setTimeout(() => setShowRescue(true), 8000);
+    return () => window.clearTimeout(t);
+  }, [ctx]);
+
+  const doRescueReset = async (): Promise<void> => {
+    setRescuing(true);
+    try {
+      await demoReset(); // 重置後 dbVersion 遞增，useElderContext 自動重讀恢復
+    } finally {
+      setRescuing(false);
+    }
+  };
 
   /* ---------------- 資料載入（subscribe 自動刷新） ---------------- */
 
@@ -168,10 +193,37 @@ export default function ElderHome() {
 
   if (!ctx) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md items-center justify-center">
-        <p className="text-elder-body text-[var(--sc-ink-soft)]" role="status">
-          載入緊……
-        </p>
+      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 px-6 text-center">
+        {showRescue ? (
+          <>
+            <p className="text-elder-body text-[var(--sc-ink-soft)]" role="status">
+              咦，資料仲未載入到。試吓下面嘅方法啦：
+            </p>
+            <div className="flex w-full flex-col gap-3">
+              <button
+                type="button"
+                data-testid="elder-reload"
+                className="btn-elder btn-primary w-full"
+                onClick={() => window.location.reload()}
+              >
+                重新載入
+              </button>
+              <button
+                type="button"
+                data-testid="elder-demo-reset"
+                className="btn-elder btn-ghost w-full"
+                onClick={() => void doRescueReset()}
+                disabled={rescuing}
+              >
+                {rescuing ? '重置緊……' : 'Demo 重置'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="text-elder-body text-[var(--sc-ink-soft)]" role="status">
+            載入緊……
+          </p>
+        )}
       </main>
     );
   }

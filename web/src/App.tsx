@@ -3,8 +3,9 @@
  *
  * 啟動（Warning 3 修復：先等同步結論再判空庫，避免 demoReset 與 sync
  * bootstrap 競態）：掛載時 await enableSync()（探測 + bootstrap/pull 結論），
- * 其後才做空庫判斷 —— sync 模式下資料有無已由 bootstrap 決定，
- * 只有 standalone 且空庫才 demoReset 初始化。最後 ensureKnowledgeLoaded()。
+ * 其後才做空庫判斷 —— elders 空庫即 demoReset 初始化（不限 standalone：
+ * 已配對且雲端有數據時 bootstrap 會在判空之前填滿本地庫，空庫時種子化
+ * 永遠正確；雲端未配對訪客因此也能得到完整演示數據）。最後 ensureKnowledgeLoaded()。
  * 等待期間呈現載入狀態（不閃爍）。
  * 路由：/ 角色選擇；/elder、/elder/health（老人端）；/family、/family/health、
  * /family/alerts、/family/report（家屬端）；/insights 總覽；/report 可打印報告。
@@ -39,11 +40,17 @@ export default function App() {
         // 1) 先等同步探測 + bootstrap/pull 結論（冪等；絕不 throw）——
         //    sync 模式下資料有無由 server bootstrap 決定，杜絕空庫
         //    demoReset 與 bootstrap 競態（Warning 3）。
-        const mode = await enableSync();
-        // 2) 其後才做空庫判斷：只有 standalone 且空庫才 demoReset。
+        await enableSync();
+        // 2) 其後才做空庫判斷：elders 空庫即 demoReset（不再只看 standalone）。
+        //    邏輯依據：已配對且雲端有數據時 bootstrap 會在判空之前填滿本地庫，
+        //    所以空庫時種子化永遠是正確行為 —— 新房間首裝置或未配對訪客
+        //    都得到完整演示數據。
+        //    注意：sync 模式 demoReset 會把種子 push 上雲 —— 已配對裝置這是
+        //    期望行為；未配對裝置 push 會 401 進 dead-letter（可接受，
+        //    與既有 KB 文件寫入同行為）。
         const provider = getProvider();
         const elders = await provider.list(tableNameOf('ElderProfile'));
-        if (elders.length === 0 && mode === 'standalone') await demoReset();
+        if (elders.length === 0) await demoReset();
         await ensureKnowledgeLoaded();
       } catch {
         /* 啟動容錯：即使載入出錯都呈現 UI，由頁面呈現空態 */
