@@ -10,6 +10,9 @@ build/
 .env
 .env.*
 !.env.example
+# 例外：web/.env.production 僅含公開層級配置（Supabase URL + publishable key，
+# 設計上會進前端 bundle），須隨倉庫提交，確保生產 build 預設帶雲端模式
+!web/.env.production
 
 # SQLite databases
 *.sqlite
