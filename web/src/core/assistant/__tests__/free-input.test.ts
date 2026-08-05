@@ -184,6 +184,20 @@ describe('自由輸入 fixture 套件 — 經 AssistantService 主管線', () =>
         }
       }
 
+      // T16 門控：非名單藥物 → 提議新增（唔寫入、唔靜默建藥）
+      if (c.proposeNewMed) {
+        expect(res.pending?.kind, `「${c.input}」應進入新藥確認 pending`).toBe('confirm_new_med');
+        if (res.pending?.kind === 'confirm_new_med') {
+          expect(res.pending.payload.name).toBe(c.proposeNewMed);
+        }
+        expect(res.openForm?.form, `「${c.input}」應提議開藥物表單`).toBe('medication');
+        expect(res.answer).toContain('要唔要');
+        const freshMeds = fresh(
+          await getProvider().list<Medication>(tableNameOf('Medication'), { elderId: ELDER_ID }),
+        );
+        expect(freshMeds, `「${c.input}」唔應該靜默建藥`).toHaveLength(0);
+      }
+
       // 抽取數據真寫入 DB
       await assertExtractionPersisted(c);
     });

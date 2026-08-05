@@ -14,7 +14,7 @@ interface Rule {
 
 /** 家人稱謂（粵語 + 書面語） */
 const FAMILY_PATTERN =
-  /個仔|仔|兒子|儿子|個女|女兒|女儿|仔女|孫仔|孫女|孫|孙子|家人|太太|老公|丈夫|妻子|老伴/
+  /個仔|阿仔|仔|兒子|儿子|個女|阿女|女兒|女儿|仔女|孫仔|阿孫|孫女|孫|孙子|家人|屋企人|太太|老公|丈夫|妻子|老伴|監護人|照顧者/
 
 /** 疑問／查詢語氣 */
 const QUESTION_PATTERN =
@@ -23,6 +23,9 @@ const QUESTION_PATTERN =
 /** 健康相關話題詞（general_health_question 用） */
 const HEALTH_TOPIC_PATTERN =
   /血壓|血糖|膽固醇|血压|食藥|服藥|服药|吃藥|瞓覺|睡眠|瞓得|失眠|飲食|饮食|運動|运动|健康|養生|养生|營養|营养|維他命|維生素|飲[^，。？！\s]{0,6}水|食嘢|保養/
+
+/** 生命體徵關鍵詞（「想記但未講數值」偵測用） */
+const VITAL_KEYWORD_LOOSE = /血壓|血圧|血糖|心跳|心率|脈搏|脉搏|體重|体重/
 
 const INTENT_RULES: Record<Exclude<Intent, 'unknown'>, Rule[]> = {
   emergency: [
@@ -40,6 +43,9 @@ const INTENT_RULES: Record<Exclude<Intent, 'unknown'>, Rule[]> = {
     { pattern: /覆[診诊]|复诊/, weight: 4 },
     { pattern: /預約|約咗|约了|预约|約好/, weight: 2 },
     { pattern: /睇醫生|睇医生|看医生|睇專科/, weight: 2 },
+    // 記錄類語句（「幫我記覆診」）：合約內仍歸 appointment_query，
+    // 記錄／查詢方向由引擎按「有冇抽取到日期 + 非疑問」分岔。
+    { pattern: /記低|記一記|記返|幫我記|帮我记|记一下|記錄返/, weight: 2 },
   ],
   health_history: [
     { pattern: /病[歷歴]|病例/, weight: 3 },
@@ -61,6 +67,12 @@ const INTENT_RULES: Record<Exclude<Intent, 'unknown'>, Rule[]> = {
   family_contact: [
     { pattern: FAMILY_PATTERN, weight: 2 },
     { pattern: /打電話|打俾|打給|致電|致电|聯絡|联系|通知|打[過个]去|call[佢他她]/i, weight: 4 },
+    // 「搵」要配家人對象先計，避免「搵吓紀錄」誤判
+    {
+      pattern:
+        /搵(?:吓)?(?:阿仔|阿女|阿孫|阿孙|屋企人|家人|監護人|照顧者|我[個嘅]?(?:仔|女|孫|太太|老公|丈夫|妻子))/,
+      weight: 4,
+    },
   ],
   family_status_query: [
     { pattern: FAMILY_PATTERN, weight: 2 },
@@ -118,6 +130,17 @@ export function classifyIntent(text: string, signals: IntentSignals = {}): Inten
   if (extraction.heartRate !== undefined) vitalCount += 1
   if (extraction.weight !== undefined) vitalCount += 1
   if (vitalCount > 0) add('vital_record', Math.min(vitalCount * 3, 6))
+
+  // 想記錄生命體徵但未講數值（例：「我要記血壓」）→ 歸 vital_record，
+  // 由引擎追問數值。「記錄／紀錄」名詞屬查詢語境，唔計。
+  if (
+    vitalCount === 0 &&
+    VITAL_KEYWORD_LOOSE.test(normalized) &&
+    /記/.test(normalized) &&
+    !/記錄|紀錄|记录|纪录/.test(normalized)
+  ) {
+    add('vital_record', 4)
+  }
 
   if (extraction.symptoms.length > 0) add('symptom', Math.min(extraction.symptoms.length * 3, 6))
 

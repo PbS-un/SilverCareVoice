@@ -84,6 +84,17 @@ export interface Medication extends BaseEntity {
   dosage: string;
   /** 人類可讀的服藥時間描述，如「每天早上 8 時」。 */
   schedule: string;
+  /**
+   * 劑量數值（結構化，如 1、30）。
+   * 向後兼容：舊數據無此欄位（undefined），同步 payload 透明帶過；
+   * dosage 字串仍是唯一真相來源，此欄位僅供 UI 拆分／重組顯示。
+   */
+  doseAmount?: number;
+  /**
+   * 劑量單位（DOSE_UNITS 之一，如「粒」「毫克 mg」）。
+   * 向後兼容：舊數據無此欄位（undefined），同步 payload 透明帶過。
+   */
+  doseUnit?: string;
 }
 
 /** 服藥記錄。 */
@@ -110,6 +121,17 @@ export interface Appointment extends BaseEntity {
   date: string;
   location: string;
   note?: string;
+  /**
+   * 時間未定標記：true 時 date 僅代表日期（甚至可為遠期佔位），
+   * UI 顯示「時間未定」而非 HH:mm。
+   * 向後兼容：舊數據無此欄位（undefined），視同 false；
+   * 同步 payload 透明帶過，不影響既有 fmtDate 邏輯。
+   */
+  timeTbd?: boolean;
+  /** 專科（如「內科」「眼科」）。向後兼容：舊數據無此欄位。 */
+  specialty?: string;
+  /** 主診醫生姓名。向後兼容：舊數據無此欄位。 */
+  doctor?: string;
 }
 
 /** 系統偵測到的健康事件（規則／AI 推論結果）。 */

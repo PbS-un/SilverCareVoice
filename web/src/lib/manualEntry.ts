@@ -4,7 +4,7 @@
  *
  * 嚴禁繞過規則引擎；嚴禁 demo-only 分支。
  */
-import { getProvider } from '../data/DataProvider';
+import { getProvider, type DataProvider } from '../data/DataProvider';
 import { tableNameOf } from '../types/entities';
 import type {
   Alert,
@@ -119,11 +119,55 @@ export interface MedicationEntryResult {
   events: HealthEvent[];
 }
 
-/** 記錄食藥狀態（已服／漏服／延遲）：更新或新建 MedicationLog，跑規則引擎。 */
+/** createMedication 輸入參數。 */
+export interface CreateMedicationInput {
+  /** 藥名（必填，trim 後不可為空）。 */
+  name: string;
+  /** 劑量描述字串（如「1 粒」「30 mg」；可用 formatDose 合成）。 */
+  dosage: string;
+  /** 人類可讀服藥時間描述（缺省為空字串）。 */
+  schedule?: string;
+  /** 劑量數值（結構化，選填）。 */
+  doseAmount?: number;
+  /** 劑量單位（DOSE_UNITS 之一或自訂文字，選填）。 */
+  doseUnit?: string;
+}
+
+/** 建立新藥（provider.put 寫入 Medication 表），回傳已儲存實體。 */
+export async function createMedication(
+  provider: DataProvider,
+  elderId: string,
+  input: CreateMedicationInput,
+): Promise<Medication> {
+  const name = input.name.trim();
+  if (!name) throw new Error('createMedication: 藥名唔可以係空');
+  const t = isoNow();
+  const medication: Medication = {
+    id: newId(),
+    elderId,
+    name,
+    dosage: input.dosage,
+    schedule: input.schedule ?? '',
+    ...(input.doseAmount !== undefined ? { doseAmount: input.doseAmount } : {}),
+    ...(input.doseUnit ? { doseUnit: input.doseUnit } : {}),
+    createdAt: t,
+    updatedAt: t,
+  };
+  return provider.put<Medication>(tableNameOf('Medication'), medication);
+}
+
+/**
+ * 記錄食藥狀態（已服／漏服／延遲）：更新或新建 MedicationLog，跑規則引擎。
+ *
+ * @param scheduledAt 選填 ISO 時間。傳入時寫入 MedicationLog.scheduledAt
+ *                    （新建 log 用之；更新既有同日 log 時同步覆寫）；
+ *                    不傳則保持既有行為（新建時以當前時間為 scheduledAt）。
+ */
 export async function recordMedicationStatus(
   elderId: string,
   medicationId: string,
   status: 'taken' | 'missed' | 'late',
+  scheduledAt?: string,
 ): Promise<MedicationEntryResult> {
   const provider = getProvider();
   const t = isoNow();
@@ -149,13 +193,14 @@ export async function recordMedicationStatus(
     ? {
         ...due,
         status,
+        ...(scheduledAt ? { scheduledAt } : {}),
         ...(status === 'taken' || status === 'late' ? { takenAt: t } : {}),
       }
     : {
         id: newId(),
         elderId,
         medicationId,
-        scheduledAt: t,
+        scheduledAt: scheduledAt ?? t,
         status,
         ...(status === 'taken' || status === 'late' ? { takenAt: t } : {}),
         createdAt: t,

@@ -123,6 +123,11 @@ test('場景8：≥10 條自由輸入全部有非空回答且寫入對話記錄'
     await expect(page.getByTestId('conversation-history')).toContainText(input);
     // 絕無錯誤提示
     await expect(page.getByRole('alert')).toHaveCount(0);
+    // T16 執行門控：覆診句子一律先回確認卡，絕不直接寫入
+    if (input === '下星期三要覆診') {
+      await expect(page.getByTestId('voice-confirm-card')).toBeVisible();
+      await expect(page.getByTestId('voice-confirm-summary')).toContainText('時間未定');
+    }
   }
 });
 

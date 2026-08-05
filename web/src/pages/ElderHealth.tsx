@@ -19,8 +19,9 @@ import { tableNameOf } from '../types/entities';
 import type { Appointment, VitalRecord, VitalType } from '../types/entities';
 import { recordBloodPressure, recordSingleVital } from '../lib/manualEntry';
 import { useAsyncData, useDbVersion, useElderContext } from '../lib/hooks';
-import { fmtDate, fmtShortDate, VITAL_LABELS } from '../lib/format';
+import { fmtAppointmentDate, fmtDate, fmtShortDate, VITAL_LABELS } from '../lib/format';
 import BottomNav, { ELDER_NAV_ITEMS } from '../components/BottomNav';
+import AppointmentModal from '../components/modals/AppointmentModal';
 
 const TYPES: VitalType[] = ['blood_pressure', 'blood_glucose', 'heart_rate', 'weight'];
 
@@ -30,6 +31,7 @@ export default function ElderHealth() {
   const elderId = ctx?.elderId ?? '';
   const [type, setType] = useState<VitalType>('blood_pressure');
   const [toast, setToast] = useState('');
+  const [apptOpen, setApptOpen] = useState(false);
 
   const { data: vitals } = useAsyncData(async () => {
     if (!elderId) return [];
@@ -155,7 +157,14 @@ export default function ElderHealth() {
         <ul data-testid="appointment-list" className="mb-4 flex flex-col gap-2">
           {(appointments ?? []).map((a) => (
             <li key={a.id} className="card-elder !py-3">
-              <p className="text-xl font-bold">{fmtDate(a.date)} · {a.location}</p>
+              <p className="text-xl font-bold">
+                {fmtAppointmentDate(a)} · {a.location}
+              </p>
+              {(a.specialty || a.doctor) && (
+                <p className="text-lg text-[var(--sc-ink-soft)]">
+                  {[a.specialty, a.doctor].filter(Boolean).join(' · ')}
+                </p>
+              )}
               {a.note && <p className="text-lg text-[var(--sc-ink-soft)]">{a.note}</p>}
             </li>
           ))}
@@ -163,8 +172,24 @@ export default function ElderHealth() {
             <li className="text-xl text-[var(--sc-muted)]">未有覆診預約。</li>
           )}
         </ul>
-        <AppointmentAddForm elderId={elderId} onDone={() => setToast('已記低覆診 ✓')} />
+        <button
+          type="button"
+          data-testid="appt-add-open"
+          onClick={() => setApptOpen(true)}
+          className="btn-elder btn-primary w-full"
+        >
+          ＋ 新增覆診
+        </button>
       </section>
+
+      {apptOpen && (
+        <AppointmentModal
+          elderId={elderId}
+          appointments={appointments ?? []}
+          onClose={() => setApptOpen(false)}
+          onDone={() => setToast('已記低覆診 ✓')}
+        />
+      )}
 
       <BottomNav items={ELDER_NAV_ITEMS} />
     </main>
@@ -244,92 +269,6 @@ function VitalAddForm({
       {err && <p role="alert" className="text-xl text-[var(--sc-urgent)]">{err}</p>}
       <button type="submit" className="btn-elder btn-primary w-full" disabled={busy}>
         {busy ? '記低緊……' : '記低'}
-      </button>
-    </form>
-  );
-}
-
-function AppointmentAddForm({ elderId, onDone }: { elderId: string; onDone: () => void }) {
-  const [date, setDate] = useState('');
-  const [location, setLocation] = useState('');
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-
-  const submit = async (): Promise<void> => {
-    if (!date || !location.trim()) {
-      setErr('請填寫日期同地點');
-      return;
-    }
-    setErr('');
-    setBusy(true);
-    try {
-      const t = new Date().toISOString();
-      const appt: Appointment = {
-        id:
-          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : `id-${Date.now()}`,
-        elderId,
-        date: new Date(`${date}T09:00:00`).toISOString(),
-        location: location.trim(),
-        ...(note.trim() ? { note: note.trim() } : {}),
-        createdAt: t,
-        updatedAt: t,
-      };
-      await getProvider().put<Appointment>(tableNameOf('Appointment'), appt);
-      setDate('');
-      setLocation('');
-      setNote('');
-      onDone();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form
-      className="card-elder flex flex-col gap-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-    >
-      <h2 className="text-xl font-bold text-[var(--sc-ink-soft)]">新增覆診</h2>
-      <label className="flex flex-col gap-1 text-xl font-bold">
-        日期
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          aria-label="覆診日期"
-          className="min-h-14 rounded-xl border-2 border-[var(--sc-line)] px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-xl font-bold">
-        醫療地點
-        <input
-          type="text"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder="例如：黑沙環衛生中心"
-          aria-label="醫療地點"
-          className="min-h-14 rounded-xl border-2 border-[var(--sc-line)] px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-xl font-bold">
-        備註（可留空）
-        <input
-          type="text"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          aria-label="備註"
-          className="min-h-14 rounded-xl border-2 border-[var(--sc-line)] px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
-        />
-      </label>
-      {err && <p role="alert" className="text-xl text-[var(--sc-urgent)]">{err}</p>}
-      <button type="submit" className="btn-elder btn-primary w-full" disabled={busy}>
-        {busy ? '記低緊……' : '記低覆診'}
       </button>
     </form>
   );

@@ -15,7 +15,7 @@ import type {
   VitalRecord,
 } from '../types/entities';
 import { useAsyncData, useDbVersion, useElderContext } from '../lib/hooks';
-import { fmtDate, fmtTime, isToday, MED_STATUS_LABELS } from '../lib/format';
+import { fmtAppointmentDate, fmtTime, isToday, MED_STATUS_LABELS } from '../lib/format';
 import BottomNav, { FAMILY_NAV_ITEMS } from '../components/BottomNav';
 import SyncBadge from '../components/SyncBadge';
 
@@ -27,6 +27,10 @@ interface TodaySummary {
   attentionCount: number;
   openAlerts: Alert[];
 }
+
+/** 本地時區日期鍵（YYYY-MM-DD）：timeTbd 預約日期級比較用，避免 UTC 切片時區偏差。 */
+const localDateKey = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export default function FamilyHome() {
   const dbVersion = useDbVersion();
@@ -57,8 +61,16 @@ export default function FamilyHome() {
         .filter((l) => isToday(l.scheduledAt) || (l.takenAt ? isToday(l.takenAt) : false))
         .map((l) => ({ ...l, medName: medNameOf(l.medicationId) })),
       todaySymptoms: symptoms.filter((s) => isToday(s.occurredAt)),
+      // 過濾語義（與 AssistantService.buildAppointmentAnswer 一致）：
+      // - timeTbd 預約以當日本地午夜存儲 → 用本地日期鍵（YYYY-MM-DD）比較，
+      //   避免 UTC 字串切片喺 UTC+8 當日 08:00 後把 timeTbd 當日預約誤判為已過；
+      // - 有時間嘅預約保留完整時間戳比較（當日已過嘅舊預約應隱藏）。
       nextAppointment: appointments
-        .filter((a) => a.date >= new Date().toISOString())
+        .filter((a) =>
+          a.timeTbd
+            ? localDateKey(new Date(a.date)) >= localDateKey(new Date())
+            : a.date >= new Date().toISOString(),
+        )
         .sort((a, b) => a.date.localeCompare(b.date))[0],
       attentionCount: events.filter(
         (e) => e.severity !== 'normal' && isToday(e.createdAt),
@@ -162,7 +174,7 @@ export default function FamilyHome() {
             <h2 className="mb-1 text-lg font-bold text-[var(--sc-ink-soft)]">下次覆診</h2>
             {s.nextAppointment ? (
               <p className="text-elder-body font-bold">
-                {fmtDate(s.nextAppointment.date)} · {s.nextAppointment.location}
+                {fmtAppointmentDate(s.nextAppointment)} · {s.nextAppointment.location}
               </p>
             ) : (
               <p className="text-xl text-[var(--sc-muted)]">沒有未到期覆診</p>

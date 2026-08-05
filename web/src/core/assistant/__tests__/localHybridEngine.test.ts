@@ -22,6 +22,11 @@ const FREE_INPUTS = [
   '我血糖3.2，有啲攰',
   '快啲嚟救我',
   '同你傾吓偈，今日去咗公園',
+  // 新增：血壓追問／覆診確認／搵家人
+  '我啱啱血壓138/82',
+  '我要記血壓',
+  '下星期三下午三點去鏡湖覆診',
+  '搵我個仔',
   '',
 ]
 
@@ -158,6 +163,59 @@ describe('LocalHybridEngine — 任意自由輸入都有合理回應', () => {
     const result = engine.analyze('')
     expect(result.intent).toBe('unknown')
     expect(result.answer.length).toBeGreaterThan(0)
+  })
+
+  /* ---------- 新增四條核心句嘅離線行為 ---------- */
+
+  it('「我啱啱血壓138/82」→ 完整血壓記錄', () => {
+    const result = engine.analyze('我啱啱血壓138/82')
+    expect(result.intent).toBe('vital_record')
+    expect(result.riskLevel).toBe('normal')
+    expect(result.answer).toContain('138/82')
+    expect(result.answer).toContain('記低')
+    expect(result.extractedData?.bloodPressure).toEqual({ systolic: 138, diastolic: 82 })
+  })
+
+  it('「我要記血壓」→ 追問上壓下壓，唔會話已記低', () => {
+    const result = engine.analyze('我要記血壓')
+    expect(result.intent).toBe('vital_record')
+    expect(result.answer).toContain('上壓同下壓係幾多')
+    expect(result.answer).not.toContain('記低咗')
+    expect(result.extractedData?.bloodPressure).toBeUndefined()
+  })
+
+  it('「下星期三下午三點去鏡湖覆診」→ 確認句式「幫你記低…啱唔啱？」', () => {
+    const result = engine.analyze('下星期三下午三點去鏡湖覆診')
+    expect(result.intent).toBe('appointment_query')
+    expect(result.answer).toContain('啱唔啱')
+    expect(result.answer).toContain('鏡湖')
+    expect(result.answer).toContain('15:00')
+    expect(result.extractedData?.appointment?.time).toBe('15:00')
+    expect(result.extractedData?.appointment?.location).toBe('鏡湖')
+    expect(result.extractedData?.appointment?.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(result.actions?.[0].type).toBe('confirm_record')
+  })
+
+  it('「我幾時覆診呀？」仍然係查詢（唔會誤入確認句式）', () => {
+    const result = engine.analyze('我幾時覆診呀？')
+    expect(result.intent).toBe('appointment_query')
+    expect(result.actions?.[0].type).toBe('query_history')
+  })
+
+  it('「搵我個仔」→ family_contact', () => {
+    const result = engine.analyze('搵我個仔')
+    expect(result.intent).toBe('family_contact')
+    expect(result.answer).toContain('個仔')
+    expect(result.actions?.[0].type).toBe('notify_family')
+  })
+
+  it('「食咗降壓藥半粒」→ 劑量一併覆述', () => {
+    const result = engine.analyze('我食咗降壓藥半粒')
+    expect(result.intent).toBe('medication_taken')
+    expect(result.answer).toContain('降壓藥')
+    expect(result.answer).toContain('0.5粒')
+    expect(result.extractedData?.medicationDoseAmount).toBe(0.5)
+    expect(result.extractedData?.medicationDoseUnit).toBe('粒')
   })
 
   it('同樣輸入必然得到同樣輸出（純函數）', () => {

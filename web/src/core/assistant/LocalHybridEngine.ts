@@ -71,6 +71,7 @@ function pickQueryTopic(text: string): string {
 }
 
 const FAMILY_TERMS: readonly string[] = [
+  '阿仔', '阿女', '阿孫', '屋企人', '監護人', '照顧者',
   '個仔', '兒子', '個女', '女兒', '孫仔', '孫女', '孫',
   '太太', '老公', '丈夫', '妻子', '老伴', '仔', '女', '家人',
 ]
@@ -81,6 +82,25 @@ function pickFamilyMember(text: string): string {
   }
   return '家人'
 }
+
+/** 覆診語句嘅疑問語氣偵測（record／query 方向分岔用） */
+const APPT_QUESTION_PATTERN = /幾時|幾號|幾點|邊日|要唔要|係咪|可唔可以|有冇|？|\?|吗|嗎/
+
+/** ISO date → 粵語口語日期（例：2026-08-12 → 8月12日（星期三）） */
+function formatChineseDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return iso
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  const weekday = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()]
+  return `${Number(m[2])}月${Number(m[3])}日（星期${weekday}）`
+}
+
+/**
+ * 藥物多候選問句佔位符：
+ * 當用戶只講「食咗藥」而 DB 有多種候選藥物時，候選列表由 AssistantService
+ * 查庫後構造問句（執行門控，後續任務）。引擎層保持純函數，用佔位預留結構。
+ */
+export const MEDICATION_CANDIDATES_PLACEHOLDER = '{{medicationCandidates}}'
 
 /* ------------------------------ 回覆模板 ------------------------------ */
 
@@ -114,9 +134,24 @@ function buildExtractedData(intent: Intent, extraction: ExtractionResult, text: 
   if (extraction.symptoms.length > 0) data.symptoms = extraction.symptoms
   if (extraction.medicationName) data.medicationName = extraction.medicationName
   if (extraction.medicationStatus) data.medicationStatus = extraction.medicationStatus
+  if (extraction.medicationDoseAmount !== undefined) data.medicationDoseAmount = extraction.medicationDoseAmount
+  if (extraction.medicationDoseUnit !== undefined) data.medicationDoseUnit = extraction.medicationDoseUnit
 
   if (intent === 'appointment_query') {
-    data.appointment = extraction.timeHints.length > 0 ? { note: extraction.timeHints.join('、') } : {}
+    const appt = extraction.appointment
+    if (appt) {
+      data.appointment = {
+        ...(appt.date ? { date: appt.date } : {}),
+        ...(appt.time ? { time: appt.time } : {}),
+        ...(appt.location ? { location: appt.location } : {}),
+        ...(appt.department ? { department: appt.department } : {}),
+        ...(appt.doctor ? { doctor: appt.doctor } : {}),
+        // 未解析到具體日期時，用時間詞提示做 note 補充
+        ...(!appt.date && extraction.timeHints.length > 0 ? { note: extraction.timeHints.join('、') } : {}),
+      }
+    } else {
+      data.appointment = extraction.timeHints.length > 0 ? { note: extraction.timeHints.join('、') } : {}
+    }
     data.queryTopic = pickQueryTopic(text)
   }
   if (intent === 'policy_query' || intent === 'medical_resource_query' || intent === 'general_health_question' || intent === 'health_history') {
@@ -126,9 +161,18 @@ function buildExtractedData(intent: Intent, extraction: ExtractionResult, text: 
   return Object.keys(data).length > 0 ? data : undefined
 }
 
-function buildVitalRecordAnswer(extraction: ExtractionResult): { answer: string; detailedAnswer?: string } {
+/** 講到血壓相關詞但未能抽取完整數值（追問用，絕不聲稱已記錄或可代量） */
+const BP_MENTION_PATTERN = /血壓|血圧|上壓|下壓|高壓|低壓|收縮壓|舒張壓/
+
+function buildVitalRecordAnswer(extraction: ExtractionResult, text: string): { answer: string; detailedAnswer?: string } {
   const parts: string[] = []
   const bp = extraction.bloodPressure
+
+  // 血壓不完整：提到血壓但冇完整數值（例：「我要記血壓」／只講咗一個數）
+  // → 追問上壓同下壓，唔講「已記低」
+  if (!bp && BP_MENTION_PATTERN.test(text)) {
+    return { answer: '好呀，你上壓同下壓係幾多？你話我知兩個數，我即刻幫你記。' }
+  }
 
   if (bp) {
     if (isBpSevere(bp)) {
@@ -236,7 +280,7 @@ export class LocalHybridEngine {
           break
 
         case 'vital_record': {
-          const built = buildVitalRecordAnswer(extraction)
+          const built = buildVitalRecordAnswer(extraction, normalized)
           answer = built.answer
           detailedAnswer = built.detailedAnswer
           break
@@ -249,11 +293,21 @@ export class LocalHybridEngine {
           break
         }
 
-        case 'medication_taken':
-          answer = extraction.medicationName
-            ? `好嘅，你食咗${extraction.medicationName}，我幫你記低咗。`
-            : '好嘅，你食咗藥，我幫你記低咗。'
+        case 'medication_taken': {
+          // 劑量有抽到就一併覆述（例：「食咗降壓藥半粒」）
+          const doseStr =
+            extraction.medicationDoseAmount !== undefined
+              ? `${extraction.medicationDoseAmount}${extraction.medicationDoseUnit ?? ''}`
+              : ''
+          if (extraction.medicationName) {
+            answer = `好嘅，你食咗${extraction.medicationName}${doseStr}，我幫你記低咗。`
+          } else {
+            // 冇明確藥名（可能有多候選）：實際候選列表由 AssistantService 查庫後
+            // 構造問句（執行門控，後續任務）；引擎層用佔位符預留問句結構。
+            answer = `好嘅，你食咗藥。你食嘅係邊一種呀？${MEDICATION_CANDIDATES_PLACEHOLDER}`
+          }
           break
+        }
 
         case 'medication_missed': {
           const name = extraction.medicationName ?? '藥'
@@ -265,10 +319,25 @@ export class LocalHybridEngine {
           break
         }
 
-        case 'appointment_query':
-          answer = '我幫你查吓你嘅覆診預約先。'
-          actions = [{ type: 'query_history', label: '查詢覆診預約' }]
+        case 'appointment_query': {
+          const appt = extraction.appointment
+          // 記錄方向：抽到日期／時間 + 非疑問句 → 確認句式「幫你記低…啱唔啱？」
+          // （實際寫入由後續執行門控任務處理，呢度只係確認問句）
+          if (appt && (appt.date || appt.time) && !APPT_QUESTION_PATTERN.test(normalized)) {
+            const parts: string[] = []
+            if (appt.date) parts.push(formatChineseDate(appt.date))
+            if (appt.time) parts.push(appt.time)
+            if (appt.location) parts.push(`去${appt.location}`)
+            if (appt.department) parts.push(`睇${appt.department}`)
+            if (appt.doctor) parts.push(`搵${appt.doctor}醫生`)
+            answer = `好嘅，幫你記低${parts.join('，')}覆診，啱唔啱呀？`
+            actions = [{ type: 'confirm_record', label: '確認覆診記錄' }]
+          } else {
+            answer = '我幫你查吓你嘅覆診預約先。'
+            actions = [{ type: 'query_history', label: '查詢覆診預約' }]
+          }
           break
+        }
 
         case 'health_history':
           answer = '我幫你搵吓你嘅健康紀錄先。'

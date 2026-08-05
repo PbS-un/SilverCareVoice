@@ -42,7 +42,27 @@ export const ExtractedDataSchema = z
     weight: z.number().positive().optional(),
     symptoms: z.array(z.string()).optional(),
     medicationName: z.string().optional(),
-    medicationStatus: z.enum(['taken', 'missed']).optional(),
+    // 'late' 必須與客戶端 extractedDataSchema 一致：之前 server 拒 'late'
+    // 會令 DeepSeek 合法輸出被 zod 打回，靜默降級 fallback。
+    medicationStatus: z.enum(['taken', 'missed', 'late']).optional(),
+    /** 劑量數值（數字或口語字串，例：0.5 / '半'） */
+    medicationDoseAmount: z.union([z.number(), z.string()]).optional(),
+    /** 劑量單位（例：粒、毫克、mg、毫升） */
+    medicationDoseUnit: z.string().optional(),
+    /** 覆診／預約資訊（皆可選） */
+    appointment: z
+      .object({
+        date: z.string().optional(),
+        location: z.string().optional(),
+        note: z.string().optional(),
+        time: z.string().optional(),
+        department: z.string().optional(),
+        doctor: z.string().optional(),
+        timeTbd: z.boolean().optional(),
+      })
+      .partial()
+      .optional(),
+    queryTopic: z.string().optional(),
   })
   .partial()
   .passthrough()

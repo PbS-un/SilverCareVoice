@@ -45,11 +45,23 @@ export const extractedDataSchema = z.object({
   symptoms: z.array(z.string()).optional(),
   medicationName: z.string().optional(),
   medicationStatus: z.enum(['taken', 'missed', 'late']).optional(),
+  /** 劑量數值（可係數字或口語字串，例：0.5 / '半'） */
+  medicationDoseAmount: z.union([z.number(), z.string()]).optional(),
+  /** 劑量單位（例：粒、毫克、mg、毫升） */
+  medicationDoseUnit: z.string().optional(),
   appointment: z
     .object({
       date: z.string().optional(),
       location: z.string().optional(),
       note: z.string().optional(),
+      /** 具體時間或時段（例：15:00、朝早） */
+      time: z.string().optional(),
+      /** 科別（例：心臟科） */
+      department: z.string().optional(),
+      /** 醫生姓名 */
+      doctor: z.string().optional(),
+      /** 時間未定（例：「遲啲再約」） */
+      timeTbd: z.boolean().optional(),
     })
     .optional(),
   queryTopic: z.string().optional(),

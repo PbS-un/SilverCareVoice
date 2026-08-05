@@ -16,10 +16,11 @@ test('服藥記錄：老人端操作 → 家屬端狀態 + 週報依從率變化
   // 0) 初始週報已服次數（DB 實算）
   const takenBefore = await readAdherenceTaken(page);
 
-  // 1) 老人端快捷「記錄食藥」→ 先記漏服
+  // 1) 老人端快捷「記錄食藥」→ 先記漏服（藥物搜尋 combobox）
   await page.goto('/#/elder');
   await page.getByTestId('quick-med').click();
-  await page.getByTestId('med-select').selectOption({ index: 0 });
+  await page.getByTestId('med-search-input').fill('降壓藥');
+  await page.getByTestId('med-search-option-0').click();
   await page.getByTestId('med-missed').click();
   await expect(page.getByRole('status').filter({ hasText: '已記低：漏服 ✓' })).toBeVisible({
     timeout: 15_000,
@@ -34,7 +35,8 @@ test('服藥記錄：老人端操作 → 家屬端狀態 + 週報依從率變化
   // 2) 再記已服 → 狀態翻轉
   await page.goto('/#/elder');
   await page.getByTestId('quick-med').click();
-  await page.getByTestId('med-select').selectOption({ index: 0 });
+  await page.getByTestId('med-search-input').fill('降壓藥');
+  await page.getByTestId('med-search-option-0').click();
   await page.getByTestId('med-taken').click();
   await expect(page.getByRole('status').filter({ hasText: '已記低：已服 ✓' })).toBeVisible({
     timeout: 15_000,
@@ -44,9 +46,12 @@ test('服藥記錄：老人端操作 → 家屬端狀態 + 週報依從率變化
   await expect(page.getByTestId('family-today-summary')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('family-today-summary').getByText('已服').first()).toBeVisible();
 
-  // 3) 自由輸入新藥已服（新 MedicationLog scheduledAt=now，必入 7 日窗口）
+  // 3) 自由輸入新藥已服（新 MedicationLog scheduledAt=now，必入 7 日窗口）。
+  // T16 門控：冇匹配唔再靜默建藥 → 提議新增；覆詞確認後先 createMedication＋記 log。
   await page.goto('/#/elder');
-  await askElder(page, '我食咗薄血藥');
+  const medBubble = await askElder(page, '我食咗薄血藥');
+  await expect(medBubble).toContainText('要唔要');
+  await askElder(page, '好呀');
 
   // 家屬端出現「薄血藥 · 已服」
   await page.goto('/#/family');

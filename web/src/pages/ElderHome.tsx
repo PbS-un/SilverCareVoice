@@ -8,28 +8,28 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { ask, HEALTH_DISCLAIMER, type AssistantResponse } from '../core/assistant/AssistantService';
+import {
+  ask,
+  HEALTH_DISCLAIMER,
+  type AssistantResponse,
+  type ContactCardItem,
+  type OpenFormSuggestion,
+  type PendingAction,
+} from '../core/assistant/AssistantService';
 import { getProvider } from '../data/DataProvider';
 import { demoReset } from '../data/demoReset';
 import { tableNameOf } from '../types/entities';
-import type {
-  Alert,
-  Conversation,
-  HealthEvent,
-  Medication,
-  MedicationLog,
-} from '../types/entities';
+import type { Alert, Appointment, Conversation, HealthEvent } from '../types/entities';
 import { isSpeechSupported, startListening, stopListening } from '../services/speech/asr';
 import { speak, stopSpeaking } from '../services/speech/tts';
-import {
-  notifyFamily,
-  recordBloodPressure,
-  recordMedicationStatus,
-} from '../lib/manualEntry';
+import { notifyFamily, recordBloodPressure } from '../lib/manualEntry';
 import { useAsyncData, useDbVersion, useElderContext } from '../lib/hooks';
-import { greetingByHour, fmtTime, isToday, MED_STATUS_LABELS } from '../lib/format';
+import { greetingByHour, fmtTime, isToday } from '../lib/format';
 import BottomNav, { ELDER_NAV_ITEMS } from '../components/BottomNav';
 import Modal from '../components/Modal';
+import MedicationLogModal from '../components/modals/MedicationLogModal';
+import AppointmentModal from '../components/modals/AppointmentModal';
+import { ContactCards, MedCandidatesCard, VoiceConfirmCard } from '../components/VoiceConfirmCard';
 
 type MicState = 'idle' | 'listening' | 'thinking' | 'done';
 
@@ -62,7 +62,9 @@ export default function ElderHome() {
   const [speaking, setSpeaking] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [emergencyOpen, setEmergencyOpen] = useState(false);
-  const [modal, setModal] = useState<'bp' | 'med' | 'family' | null>(null);
+  const [modal, setModal] = useState<'bp' | 'med' | 'family' | 'appt' | null>(null);
+  /** 門控提議／「改一改」帶入嘅表單預填。 */
+  const [formPrefill, setFormPrefill] = useState<OpenFormSuggestion['prefill'] | undefined>(undefined);
   const [toast, setToast] = useState('');
   const micStateRef = useRef<MicState>('idle');
   micStateRef.current = micState;
@@ -112,26 +114,105 @@ export default function ElderHome() {
     };
   }, [dbVersion, elderId]);
 
+  /* 覆診列表（AppointmentModal 地點候選去重用） */
+  const { data: appointments } = useAsyncData(async () => {
+    if (!elderId) return [];
+    return getProvider().list<Appointment>(tableNameOf('Appointment'), { elderId });
+  }, [dbVersion, elderId]);
+
   /* ---------------- 送出訊息（語音／文字同一路徑） ---------------- */
 
-  const sendMessage = async (raw: string, source: 'voice' | 'text'): Promise<void> => {
+  /**
+   * pendingOverride：明確帶入嘅 pending（卡片回調用）；
+   * 唔帶就自動沿用上一個 response.pending（追問輪）。
+   * 傳 null = 強制唔帶 pending。
+   */
+  const sendMessage = async (
+    raw: string,
+    source: 'voice' | 'text',
+    pendingOverride?: PendingAction | null,
+  ): Promise<void> => {
     const msg = raw.trim();
     if (!msg || !elderId || sending) return;
     setSending(true);
     setErrorMsg('');
     setMicState('thinking');
     setShowDetail(false);
+    const pending = pendingOverride === null ? undefined : pendingOverride ?? response?.pending;
     try {
-      const res = await ask(elderId, msg, { source, userName: ctx?.elderName });
+      const res = await ask(elderId, msg, {
+        source,
+        userName: ctx?.elderName,
+        ...(pending ? { pending } : {}),
+      });
       setResponse(res);
       setMicState('done');
       if (res.riskLevel === 'urgent') setEmergencyOpen(true);
+      // 追問／確認／候選／聯絡卡 → 自動 TTS（先停再讀）
+      if (res.pending || res.confirmation || res.candidates || res.contactCard) {
+        stopSpeaking();
+        const ok = speak(res.answer, {
+          onEnd: () => setSpeaking(false),
+          onError: () => setSpeaking(false),
+        });
+        setSpeaking(ok);
+      }
     } catch {
       setErrorMsg('出咗啲問題，請再試一次。');
       setMicState('idle');
     } finally {
       setSending(false);
     }
+  };
+
+  /* ---------------- 執行門控卡片回調（T16） ---------------- */
+
+  /** 用確認／取消／藥名／數字回覆上一輪 pending。 */
+  const replyPending = (msg: string): void => {
+    if (!response?.pending) return;
+    void sendMessage(msg, 'text', response.pending);
+  };
+
+  /** 確認卡「確認記錄」。 */
+  const onConfirmCard = (): void => replyPending('啱');
+
+  /** 確認卡「改一改」→ 開對應 Modal 並預填。 */
+  const onEditCard = (): void => {
+    const c = response?.confirmation;
+    if (!c) return;
+    if (c.kind === 'appointment') {
+      const p = c.payload;
+      setFormPrefill({
+        ...(p.location ? { location: p.location } : {}),
+        ...(p.date ? { date: p.date } : {}),
+        ...(p.time ? { time: p.time } : {}),
+        ...(p.department ? { specialty: p.department } : {}),
+        ...(p.doctor ? { doctor: p.doctor } : {}),
+        ...(p.note ? { note: p.note } : {}),
+        ...(p.timeTbd ? { timeTbd: true } : {}),
+      });
+      setModal('appt');
+    } else {
+      setFormPrefill({ query: c.payload.name });
+      setModal('med');
+    }
+  };
+
+  /** openForm 提議 → 開對應 Modal 並預填。 */
+  const openSuggestedForm = (s: OpenFormSuggestion): void => {
+    setFormPrefill(s.prefill);
+    setModal(s.form === 'medication' ? 'med' : s.form === 'appointment' ? 'appt' : 'bp');
+  };
+
+  /** 聯絡卡「通知佢我唔舒服」→ notifyFamily（現有 Alert 流程）。 */
+  const onContactNotify = async (item: ContactCardItem): Promise<void> => {
+    await notifyFamily(elderId, `長者想通知${item.name}：佢覺得唔舒服，請盡快聯絡佢。`);
+    setToast(`已經通知咗${item.name} ✓`);
+  };
+
+  const closeForm = (): void => {
+    setModal(null);
+    setFormPrefill(undefined);
   };
 
   /* ---------------- 麥克風 ---------------- */
@@ -270,14 +351,14 @@ export default function ElderHome() {
           setText('');
         }}
       >
-        <input
+        <textarea
           data-testid="text-input"
-          type="text"
+          rows={2}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="打字都得，例如：我今日有啲頭暈"
+          placeholder={'例如：我啱啱量血壓 138/82，\n食咗降血壓藥，今日有少少頭暈。'}
           aria-label="文字輸入"
-          className="min-h-14 w-full rounded-2xl border-2 border-[var(--sc-line)] bg-white px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
+          className="min-h-[80px] w-full resize-none rounded-2xl border-2 border-[var(--sc-line)] bg-white px-4 py-3 text-elder-body outline-none focus:border-[var(--sc-idle)]"
         />
         <button
           type="submit"
@@ -373,6 +454,41 @@ export default function ElderHome() {
         </section>
       )}
 
+      {/* 執行門控卡片（T16）：確認卡／候選藥／聯絡卡，喺對話流內 */}
+      {response?.confirmation && (
+        <VoiceConfirmCard
+          summary={response.confirmation.summary}
+          busy={sending}
+          onConfirm={onConfirmCard}
+          onEdit={onEditCard}
+        />
+      )}
+      {response?.candidates && response.candidates.length > 0 && (
+        <MedCandidatesCard
+          candidates={response.candidates}
+          busy={sending}
+          onSelect={(c) => replyPending(c.name)}
+          onNone={() => replyPending('都唔係')}
+        />
+      )}
+      {response?.contactCard && response.contactCard.length > 0 && (
+        <ContactCards items={response.contactCard} onNotify={onContactNotify} />
+      )}
+      {response?.openForm && (
+        <button
+          type="button"
+          data-testid={`open-form-${response.openForm.form}`}
+          className="btn-elder btn-primary mb-4 w-full !min-h-14 text-xl"
+          onClick={() => openSuggestedForm(response.openForm!)}
+        >
+          {response.openForm.form === 'medication'
+            ? '📝 開藥物表單'
+            : response.openForm.form === 'appointment'
+              ? '📝 開覆診表單'
+              : '📝 開血壓表單'}
+        </button>
+      )}
+
       {/* 提示 toast */}
       {toast && (
         <p role="status" className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-xl font-bold text-[var(--sc-ok)]">
@@ -428,9 +544,11 @@ export default function ElderHome() {
       {modal === 'bp' && (
         <BloodPressureModal
           elderId={elderId}
-          onClose={() => setModal(null)}
+          initialSystolic={formPrefill?.systolic}
+          initialDiastolic={formPrefill?.diastolic}
+          onClose={closeForm}
           onDone={(msg) => {
-            setModal(null);
+            closeForm();
             onFamilyNotified(msg);
           }}
         />
@@ -438,13 +556,28 @@ export default function ElderHome() {
 
       {/* 彈窗：記錄食藥 */}
       {modal === 'med' && (
-        <MedicationModal
+        <MedicationLogModal
           elderId={elderId}
           dbVersion={dbVersion}
-          onClose={() => setModal(null)}
+          initialQuery={formPrefill?.query}
+          onClose={closeForm}
           onDone={(msg) => {
-            setModal(null);
+            closeForm();
             onFamilyNotified(msg);
+          }}
+        />
+      )}
+
+      {/* 彈窗：新增覆診（門控「改一改」／openForm 預填） */}
+      {modal === 'appt' && (
+        <AppointmentModal
+          elderId={elderId}
+          appointments={appointments ?? []}
+          initial={formPrefill}
+          onClose={closeForm}
+          onDone={() => {
+            closeForm();
+            onFamilyNotified('已記低覆診 ✓');
           }}
         />
       )}
@@ -486,15 +619,21 @@ export default function ElderHome() {
 
 function BloodPressureModal({
   elderId,
+  initialSystolic,
+  initialDiastolic,
   onClose,
   onDone,
 }: {
   elderId: string;
+  /** 受控預填（T16）：語音門控已講出嘅上壓值。 */
+  initialSystolic?: string;
+  /** 受控預填（T16）：語音門控已講出嘅下壓值。 */
+  initialDiastolic?: string;
   onClose: () => void;
   onDone: (msg: string) => void;
 }) {
-  const [sys, setSys] = useState('');
-  const [dia, setDia] = useState('');
+  const [sys, setSys] = useState(initialSystolic ?? '');
+  const [dia, setDia] = useState(initialDiastolic ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -556,93 +695,6 @@ function BloodPressureModal({
         >
           {busy ? '記低緊……' : '記低'}
         </button>
-      </div>
-    </Modal>
-  );
-}
-
-function MedicationModal({
-  elderId,
-  dbVersion,
-  onClose,
-  onDone,
-}: {
-  elderId: string;
-  dbVersion: number;
-  onClose: () => void;
-  onDone: (msg: string) => void;
-}) {
-  const [medId, setMedId] = useState('');
-  const [busy, setBusy] = useState(false);
-  const { data: meds } = useAsyncData(async () => {
-    if (!elderId) return [];
-    return getProvider().list<Medication>(tableNameOf('Medication'), { elderId });
-  }, [dbVersion, elderId]);
-
-  const selected = (meds ?? []).find((m) => m.id === (medId || meds?.[0]?.id));
-
-  const submit = async (status: MedicationLog['status']): Promise<void> => {
-    const target = medId || meds?.[0]?.id;
-    if (!target || status === 'pending') return;
-    setBusy(true);
-    try {
-      await recordMedicationStatus(elderId, target, status);
-      onDone(`已記低：${MED_STATUS_LABELS[status]} ✓`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal title="記錄食藥" onClose={onClose}>
-      <div className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1 text-xl font-bold">
-          邊種藥？
-          <select
-            data-testid="med-select"
-            value={medId || meds?.[0]?.id || ''}
-            onChange={(e) => setMedId(e.target.value)}
-            className="min-h-14 rounded-xl border-2 border-[var(--sc-line)] bg-white px-4 text-elder-body outline-none focus:border-[var(--sc-idle)]"
-          >
-            {(meds ?? []).map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}（{m.dosage}）
-              </option>
-            ))}
-          </select>
-        </label>
-        {selected && (
-          <p className="text-xl text-[var(--sc-ink-soft)]">時間：{selected.schedule}</p>
-        )}
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            type="button"
-            data-testid="med-taken"
-            className="btn-elder btn-ok !px-2"
-            onClick={() => void submit('taken')}
-            disabled={busy || !selected}
-          >
-            已服
-          </button>
-          <button
-            type="button"
-            data-testid="med-missed"
-            className="btn-elder btn-urgent !px-2"
-            onClick={() => void submit('missed')}
-            disabled={busy || !selected}
-          >
-            漏服
-          </button>
-          <button
-            type="button"
-            data-testid="med-late"
-            className="btn-elder btn-primary !px-2"
-            onClick={() => void submit('late')}
-            disabled={busy || !selected}
-          >
-            延遲
-          </button>
-        </div>
       </div>
     </Modal>
   );

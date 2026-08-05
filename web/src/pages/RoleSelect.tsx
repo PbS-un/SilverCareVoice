@@ -64,7 +64,7 @@ export default function RoleSelect() {
           <button
             type="button"
             data-testid="role-family"
-            aria-label="我是家人"
+            aria-label="我是監護人"
             onClick={() => navigate('/family')}
             className="card-elder group flex items-center gap-4 text-left transition-transform hover:-translate-y-0.5"
           >
@@ -75,8 +75,8 @@ export default function RoleSelect() {
               👨‍👩‍👧
             </span>
             <span>
-              <span className="text-elder-title block">我是家人</span>
-              <span className="text-lg text-[var(--sc-ink-soft)]">睇到屋企長者今日情況</span>
+              <span className="text-elder-title block">我是監護人</span>
+              <span className="text-lg text-[var(--sc-ink-soft)]">查看及跟進長者健康情況</span>
             </span>
           </button>
 

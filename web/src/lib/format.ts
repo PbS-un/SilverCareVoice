@@ -1,7 +1,7 @@
 /**
  * T6 UI 格式化小工具（粵語語境、本地時區）。
  */
-import type { VitalType } from '../types/entities';
+import type { Appointment, VitalType } from '../types/entities';
 
 /** 按時段問候：早晨／午安／晚安。 */
 export function greetingByHour(now = new Date()): string {
@@ -17,6 +17,20 @@ export function fmtDate(iso: string): string {
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${d.getMonth() + 1}月${d.getDate()}號 ${hh}:${mm}`;
+}
+
+/**
+ * 覆診日期顯示：timeTbd 為 true 時顯示「M月D號（時間未定）」
+ * （日期部分沿用 fmtDate 的「M月D號」邏輯，唔會丟失日期），
+ * 否則沿用 fmtDate 的「M月D號 HH:mm」邏輯（本地時區）。
+ * 舊數據無 timeTbd 欄位（undefined）時自動 fallback 至 fmtDate，向後兼容。
+ */
+export function fmtAppointmentDate(a: Appointment): string {
+  if (a.timeTbd) {
+    const d = new Date(a.date);
+    return `${d.getMonth() + 1}月${d.getDate()}號（時間未定）`;
+  }
+  return fmtDate(a.date);
 }
 
 /** ISO → '14:30'。 */

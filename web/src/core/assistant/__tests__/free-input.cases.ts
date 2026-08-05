@@ -33,6 +33,11 @@ export interface FreeInputCase {
     /** 斷言呢句話唔應該抽取到血壓（例：中文數字寫法） */
     noBloodPressure?: boolean
   }
+  /**
+   * 執行門控（T16）：非名單藥物唔會靜默建藥，
+   * 改為提議新增（confirmation pending + openForm medication）。
+   */
+  proposeNewMed?: string
   /** actions 必須包含嘅 type */
   actionsContains?: string[]
 }
@@ -141,21 +146,24 @@ export const FREE_INPUT_CASES: readonly FreeInputCase[] = [
     input: '今日遲咗食薄血藥',
     intents: ['medication_missed'],
     riskLevel: 'normal',
-    expectExtracted: { medicationStatus: 'late', medicationName: '薄血藥' },
+    // T16 門控：「薄血藥」唔喺藥物名單 → 唔靜默建藥，提議新增
+    proposeNewMed: '薄血藥',
   },
   {
     id: 'med-missed-cholesterol',
     input: '漏咗食膽固醇藥',
     intents: ['medication_missed'],
     riskLevel: 'normal',
-    expectExtracted: { medicationStatus: 'missed', medicationName: '膽固醇藥' },
+    // T16 門控：非名單藥物 → 提議新增（唔自動建藥）
+    proposeNewMed: '膽固醇藥',
   },
   {
     id: 'med-missed-sleeping-written',
     input: '昨晚忘了吃安眠藥',
     intents: ['medication_missed'],
     riskLevel: 'normal',
-    expectExtracted: { medicationStatus: 'missed', medicationName: '安眠藥' },
+    // T16 門控：非名單藥物 → 提議新增（唔自動建藥）
+    proposeNewMed: '安眠藥',
   },
   {
     id: 'med-taken-written',
