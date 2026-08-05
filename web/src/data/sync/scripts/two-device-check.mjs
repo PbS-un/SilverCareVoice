@@ -3,20 +3,33 @@
  *
  * 場景：
  *   c) 無 token 訪問 /sync/bootstrap → 401（Warning 5）
- *   基本：device A push → device B 經 WS 收到 change，pull 可見
+ *   基本：device A push → device B 經 WS 收到 change，pull 可見（--no-ws 時跳過 WS 段）
  *   b) 慢時鐘 op（updatedAt 早於 cursor 對應時間）push 後仍可被 pull 取到（Critical 1）
  *   a) device A demo reset（tombstone + 重蓋章 seed put）→ device B 收斂到 seed，不分叉（Critical 2）
  *
  * 用法（server 需已運行於 localhost:8787，且需與 server 一致的 SYNC_TOKEN）：
- *   $env:SYNC_TOKEN='<token>' ; node web/src/data/sync/scripts/two-device-check.mjs [baseUrl]
+ *   $env:SYNC_TOKEN='<token>' ; node web/src/data/sync/scripts/two-device-check.mjs [baseUrl] [--no-ws]
+ *
+ *   --no-ws：跳過所有 WebSocket 相關斷言（WS 連線註冊、change 廣播即時性），
+ *     僅驗證 HTTP 合約場景（401 鑑權、push/pull、seq 游標、慢時鐘 op、reset 收斂）。
+ *     用於 Supabase Edge Function 雲端後端（雲端無 /ws，改以 Realtime broadcast + 輪詢）。
+ *
+ *   雲端模式需另設 SYNC_APIKEY（= Supabase anon/publishable key）：Edge Function
+ *   網關要求 apikey 標頭；sync token 仍以 Authorization: Bearer 傳遞（函數兩者並存）。
+ *     $env:SYNC_TOKEN='<token>' ; $env:SYNC_APIKEY='<anon key>' ; node ... <cloud baseUrl> --no-ws
+ *
  * 成功輸出 "PASS" 並 exit 0；失敗 exit 1。
  */
 import WebSocket from 'ws'
 
-const BASE = process.argv[2] ?? 'http://localhost:8787'
+const args = process.argv.slice(2)
+const NO_WS = args.includes('--no-ws')
+const BASE = args.find((a) => !a.startsWith('--')) ?? 'http://localhost:8787'
 const WS_URL = BASE.replace(/^http/, 'ws') + '/ws'
 const TOKEN = process.env.SYNC_TOKEN ?? ''
-const TIMEOUT_MS = 15_000
+/** 雲端網關 apikey（可選）：設定後所有請求附 apikey 與 Bearer 並存。 */
+const APIKEY = process.env.SYNC_APIKEY ?? ''
+const TIMEOUT_MS = 30_000
 
 const ts = Date.now()
 const deviceA = `dev-integ-A-${ts}`
@@ -30,7 +43,9 @@ function fail(msg) {
 
 if (!TOKEN) fail('缺少 SYNC_TOKEN 環境變數（需與 server 一致；見 server 啟動日誌）')
 
-const AUTH = { Authorization: `Bearer ${TOKEN}` }
+const AUTH = { Authorization: `Bearer ${TOKEN}`, ...(APIKEY ? { apikey: APIKEY } : {}) }
+/** 純健康／無鑑權請求的標頭（雲端網關仍需 apikey）。 */
+const PLAIN = APIKEY ? { apikey: APIKEY } : {}
 const timer = setTimeout(() => fail(`timeout（${TIMEOUT_MS}ms 內未完成）`), TIMEOUT_MS)
 
 /** 客戶端 LWW apply 模擬（與 SyncClient.applyOps / server pushOps 同規則）。 */
@@ -48,42 +63,48 @@ function applyLocal(state, op, writer) {
 
 // 0) health
 try {
-  const h = await fetch(`${BASE}/api/health`)
+  const h = await fetch(`${BASE}/api/health`, { headers: PLAIN })
   if (!h.ok) fail(`/api/health 回傳 ${h.status}`)
 } catch (e) {
   fail(`無法連線 server（${BASE}）：${e.message}。請先執行 npm run dev:server`)
 }
 console.log('[ok] /api/health 可達')
 
-// c) 無 token → 401
+// c) 無 token → 401（帶 apikey 但不帶 sync token，驗證的是函數層鑑權而非網關層）
 {
-  const r = await fetch(`${BASE}/sync/bootstrap`)
+  const r = await fetch(`${BASE}/sync/bootstrap`, { headers: PLAIN })
   if (r.status !== 401) fail(`無 token /sync/bootstrap 應回 401，實際 ${r.status}`)
   console.log('[ok] 無 token 訪問 /sync/bootstrap → 401')
 }
 
-// 1) device B：WS 連線並註冊（hello 帶 token）
-const ws = new WebSocket(WS_URL)
-let changeCount = 0
+// 1) device B：WS 連線並註冊（hello 帶 token）；--no-ws 時整段跳過並直接跑 main
 const stateB = new Map() // device B 本地狀態模擬
-ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', deviceId: deviceB, token: TOKEN })))
-ws.on('message', (data) => {
-  const msg = JSON.parse(data.toString())
-  if (msg.type === 'hello_ok') {
-    console.log('[ok] device B WS 註冊成功（hello_ok，token 驗證通過）')
-    void main()
-  } else if (msg.type === 'auth_error') {
-    fail(`device B hello 被拒（auth_error）：token 與 server 不符？`)
-  } else if (msg.type === 'change') {
-    changeCount += 1
-    if (changeCount === 1) {
-      const hit = (msg.ops ?? []).some((op) => op.entityId === entityId && op.tbl === 'VitalRecord')
-      if (!hit) return
-      console.log(`[ok] device B 收到 change（origin=${msg.originDeviceId}，entityId=${entityId}）`)
+let ws = null
+let changeCount = 0
+if (!NO_WS) {
+  ws = new WebSocket(WS_URL)
+  ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', deviceId: deviceB, token: TOKEN })))
+  ws.on('message', (data) => {
+    const msg = JSON.parse(data.toString())
+    if (msg.type === 'hello_ok') {
+      console.log('[ok] device B WS 註冊成功（hello_ok，token 驗證通過）')
+      void main()
+    } else if (msg.type === 'auth_error') {
+      fail(`device B hello 被拒（auth_error）：token 與 server 不符？`)
+    } else if (msg.type === 'change') {
+      changeCount += 1
+      if (changeCount === 1) {
+        const hit = (msg.ops ?? []).some((op) => op.entityId === entityId && op.tbl === 'VitalRecord')
+        if (!hit) return
+        console.log(`[ok] device B 收到 change（origin=${msg.originDeviceId}，entityId=${entityId}）`)
+      }
     }
-  }
-})
-ws.on('error', (e) => fail(`device B WS 錯誤：${e.message}`))
+  })
+  ws.on('error', (e) => fail(`device B WS 錯誤：${e.message}`))
+} else {
+  console.log('[skip] --no-ws：跳過 WS 連線註冊與 change 廣播斷言（僅驗證 HTTP 合約）')
+  void main()
+}
 
 async function pushAs(deviceId, ops) {
   const res = await fetch(`${BASE}/sync/push`, {
@@ -102,7 +123,7 @@ async function pullOps(since) {
 }
 
 async function main() {
-  await new Promise((r) => setTimeout(r, 200)) // 確保 B 已註冊
+  if (!NO_WS) await new Promise((r) => setTimeout(r, 200)) // 確保 B 已註冊（--no-ws 無需等待）
 
   // 2) 基本：device A push 一筆 VitalRecord
   const now = new Date().toISOString()
@@ -203,7 +224,11 @@ async function main() {
   console.log('[ok] device A reset 後，device B 與 server 收斂到 seed（不分叉、tombstone < seed put）')
 
   clearTimeout(timer)
-  ws.close()
-  console.log('PASS：雙裝置同步（WS 廣播 + seq 游標 + 慢時鐘不遺漏 + reset 收斂 + token 鑑權）全部正常')
+  ws?.close()
+  console.log(
+    NO_WS
+      ? 'PASS：雙裝置同步 HTTP 合約（401 鑑權 + push/pull + seq 游標 + 慢時鐘不遺漏 + reset 收斂）全部正常（--no-ws：WS 廣播斷言已跳過）'
+      : 'PASS：雙裝置同步（WS 廣播 + seq 游標 + 慢時鐘不遺漏 + reset 收斂 + token 鑑權）全部正常',
+  )
   process.exit(0)
 }

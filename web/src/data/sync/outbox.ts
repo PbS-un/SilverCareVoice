@@ -16,7 +16,7 @@ import { TABLE_NAME_LIST, type BaseEntity, type TableName, type VitalRecord, typ
 import { IndexedDBProvider } from '../IndexedDBProvider';
 import type { BulkEntry, DataProvider, ListFilter, SeedData, SubscribeCallback, Unsubscribe } from '../DataProvider';
 import { SyncClient } from './SyncClient';
-import { TABLE_TO_ENTITY, authHeaders, newId, probeServer, getOrCreateDeviceId, type PushResult, type WireOp } from './wire';
+import { TABLE_TO_ENTITY, newId, probeServer, getOrCreateDeviceId, syncAuthHeaders, syncEndpoint, type PushResult, type WireOp } from './wire';
 
 function isoNow(): string {
   return new Date().toISOString();
@@ -77,7 +77,9 @@ export class Outbox {
     this.deviceId = deviceId;
     this.maxBatch = opts.maxBatch ?? 250;
     this.debounceMs = opts.debounceMs ?? 200;
-    this.fetchImpl = opts.fetchImpl ?? fetch;
+    // bind(globalThis)：fetch 以裸引用存放後再調用會丟失 receiver，
+    // 觸發 "Illegal invocation"（雲端模式下 push 因此從未發出）。
+    this.fetchImpl = (opts.fetchImpl ?? fetch).bind(globalThis);
     this.db = new OutboxDB(dbName);
   }
 
@@ -128,9 +130,11 @@ export class Outbox {
         }
         let res: Response;
         try {
-          res = await this.fetchImpl('/sync/push', {
+          // 本地：'/sync/push' + Authorization Bearer <syncToken>（歷史行為不變）。
+          // 雲端：syncUrl('/push') + ?token=<syncToken> query + anon apikey 標頭。
+          res = await this.fetchImpl(syncEndpoint('/push'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            headers: { 'Content-Type': 'application/json', ...syncAuthHeaders() },
             body: JSON.stringify({ deviceId: this.deviceId, ops: rows.map((r) => r.op) }),
           });
         } catch {
@@ -268,7 +272,8 @@ export class SyncedProvider implements DataProvider {
   enableSync(fetchImpl?: typeof fetch): Promise<SyncMode> {
     if (this.syncClient) return Promise.resolve('sync' as SyncMode);
     if (this.pending) return this.pending;
-    const doFetch = fetchImpl ?? fetch;
+    // bind(globalThis)：fetch 以裸引用轉手調用會觸發 "Illegal invocation"（見 fetchWithTimeout 註釋）。
+    const doFetch = (fetchImpl ?? fetch).bind(globalThis);
     this.pending = (async (): Promise<SyncMode> => {
       try {
         const reachable = await probeServer(doFetch);

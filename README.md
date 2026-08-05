@@ -10,7 +10,7 @@
 
 ---
 
-## 兩種運行模式
+## 三種運行模式
 
 ### 模式 A：GitHub Pages 純前端（Standalone）
 
@@ -24,6 +24,18 @@
   - **AI Proxy**：`POST /api/ai/chat` —— DeepSeek API Key 只存後端（`server/.env`），絕不下發前端；無 Key 時自動回 `provider:'local'`，前端確定性走 Local Hybrid Engine。
   - **雙裝置同步**：`/sync/bootstrap`、`/sync/pull`、`/sync/push` + WebSocket `/ws`，SQLite 中繼，長者手機與家屬電腦在區網內實時同步。同步端點使用配對 token（見 server/README.md）。
 - 前端 `vite dev`（5173）已配置 `/api`、`/sync`、`/ws` 代理至 8787；dev server 已監聽 `0.0.0.0`（`host: true`），第二裝置（如長者手機）在區網內用 `http://<電腦 LAN IP>:5173` 即可訪問，毋需額外配置。
+
+### 模式 C：雲端全功能演示（Supabase）
+
+- **公開連結**：<https://pbs-un.github.io/SilverCareVoice/> —— GitHub Pages 前端＋Supabase 雲端後端，承載**全部功能**：
+  - **真 DeepSeek AI**：經 Edge Function 代理（`/api/ai/chat`），API Key 只存 Supabase secrets，絕不下發前端。
+  - **雙裝置跨網同步**：Postgres op-log／LWW（`/sync/*`）＋ Realtime 廣播，無需同一區網，互聯網任意兩台裝置皆可實時同步。
+- 雲端後端由 `supabase/functions/silvercare`（單一 Edge Function，提供 `/api/health`、`/api/ai/chat`、`/sync/*`）與 `supabase/migrations/0001_sync_tables.sql`（sync_ops／sync_entities）構成；前端構建時注入 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 即開啟雲端模式（見 `web/src/config/backend.ts`，未注入則自動降級為本地模式，向後相容）。CI workflow 已預留 env 注入與 bundle 校驗。
+- **評委第二裝置配對**：第二台裝置瀏覽器開啟
+  `https://pbs-un.github.io/SilverCareVoice/?syncToken=<token>`
+  （`<token>` 即部署時設定的 SYNC_TOKEN；兩台裝置帶同一 token 即進入同一 room，長者端記錄一句，家屬端數秒內可見。token 只需帶一次，web 端自動存入 localStorage）。
+- **部署／重建步驟**：完整指引見 [supabase/DEPLOYMENT.md](./supabase/DEPLOYMENT.md)（CLI 安裝、資料庫遷移、secrets、Edge Function 部署、GitHub CI 變數、評委配對與故障排查）。
+- **驗證狀態**：本地全量測試通過（Vitest 285 cases＋Playwright E2E 16 cases）；雲端線上驗證待完成 Supabase 部署與 GitHub vars 設定後生效。
 
 ---
 
@@ -79,10 +91,10 @@ npm run dev:all        # server 8787 + web 5173
 | --- | --- | --- |
 | 項目簡報 PDF（5 頁 A4） | `deliverables/銀髮一句通_項目簡報.pdf` | `node scripts/generate-pdf.mjs` |
 | Demo 影片（真實操作、不剪接） | `deliverables/demo.webm` | `node scripts/generate-video.mjs` |
-| GitHub Pages 部署 | 本地 `gh-pages` branch + `.github/workflows/deploy-pages.yml` | `node scripts/deploy-pages.mjs`（其後由用戶自行 push） |
+| GitHub Pages 部署 | <https://pbs-un.github.io/SilverCareVoice/>（已上線）＋`.github/workflows/deploy-pages.yml` | `node scripts/deploy-pages.mjs`／CI 自動部署 |
 
-> PDF 與 QR 的公開 URL 在正式發布前以「待發布」佔位呈現；取得 URL 後執行
-> `node scripts/generate-pdf.mjs --url <公開URL>` 即可一條命令重生成。
+> PDF 與 QR 的公開 URL 已更新為正式連結 <https://pbs-un.github.io/SilverCareVoice/>；
+> 如 URL 變動，執行 `node scripts/generate-pdf.mjs --url <公開URL>` 即可一條命令重生成。
 
 ---
 
@@ -127,7 +139,7 @@ Risk Rules → HealthEvent → Alert → 家屬端提醒 → 已跟進 → 回�
 ├── deliverables/         # 產出之 PDF 與影片
 ├── .github/workflows/    # GitHub Pages 部署 workflow（push 後生效）
 ├── README.md / THIRD_PARTY.md / DELIVERY.md
-└── supabase/             # （備選）Supabase schema / seed
+└── supabase/             # Supabase 雲端後端（模式 C）：Edge Function、遷移、DEPLOYMENT.md 部署指引
 ```
 
 ---

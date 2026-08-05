@@ -1,0 +1,18 @@
+# SilverCareVoice — Edge Function「silvercare」配置
+#
+# ⚠ 格式說明（Supabase 現行 CLI）：
+#   supabase CLI 讀取的配置文件是專案層級的 `supabase/config.toml`，
+#   函數選項以 `[functions.<function_name>]` section 表達；CLI 並不會
+#   讀取函數目錄內的 config.toml。本檔按任務要求置於此作為該函數的
+#   配置記錄 —— 執行 `supabase functions serve` / `supabase deploy` 前，
+#   請將下方 section 合併至 supabase/config.toml（若尚不存在可直接
+#   將本檔內容複製到該位置並改名）。
+#
+# npm 依賴（zod、@supabase/supabase-js）經 index.ts 內的 `npm:` 規範
+# 導入，Deno Edge Runtime 自動解析，無需在此聲明。
+
+[functions.silvercare]
+# 本函數自帶 SYNC_TOKEN 鑑權（/sync/*）且 /api/* 為公開代理端點，
+# 不使用 Supabase JWT 校驗（客戶端為純 fetch，無 anon JWT）。
+verify_jwt = false
+# entrypoint 預設即 ./index.ts，無需顯式指定。

@@ -68,6 +68,12 @@ export default defineConfig({
       url: 'http://localhost:5173',
       reuseExistingServer: !process.env.CI,
       timeout: 90_000,
+      env: {
+        // 測試隔離：進程環境變數優先於 web/.env 文件（Vite env 載入順序），
+        // 強制置空 → 前端必走本地模式（dev proxy → localhost:8787），
+        // 杜絕開發者本地 .env 的真實 VITE_SUPABASE_URL 污染 E2E。
+        VITE_SUPABASE_URL: '',
+      },
     },
   ],
 })

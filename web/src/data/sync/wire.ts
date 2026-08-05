@@ -8,6 +8,7 @@
  */
 
 import { TABLE_NAMES, type EntityName, type TableName } from '../../types/entities';
+import { cloudHeaders, healthUrl, isCloudMode, syncUrl } from '../../config/backend';
 
 /** 線協議上的一筆操作（push / pull / WS change 共用）。 */
 export interface WireOp {
@@ -124,25 +125,70 @@ export async function fetchWithTimeout(
   url: string,
   init: RequestInit = {},
   timeoutMs = 2000,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl?: typeof fetch,
 ): Promise<Response> {
+  // bind(globalThis)：fetch 經變數轉手後以裸引用調用會丟失 receiver，
+  // 在部分瀏覽器觸發 "Illegal invocation"（雲端模式 outbox push 因此從未發出）。
+  const doFetch = (fetchImpl ?? fetch).bind(globalThis);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetchImpl(url, { ...init, signal: controller.signal });
+    return await doFetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** 探測 server 是否可達（GET /api/health，短超時）。絕不 throw。 */
+/**
+ * 探測 server 是否可達（GET /api/health）。絕不 throw。
+ * 本地模式：短超時 2000ms、不重試（歷史行為逐字不變）。
+ * 雲端模式：首次 5000ms（Edge Function 冷啟動）、重試收緊到 3000ms，
+ * 將啟動最壞等待（5s + 3s = 8s）壓低（原 5s + 5s）。
+ */
 export async function probeServer(fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  if (isCloudMode()) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const timeoutMs = attempt === 0 ? 5000 : 3000;
+        const res = await fetchWithTimeout(healthUrl(), { headers: { ...cloudHeaders() } }, timeoutMs, fetchImpl);
+        if (res.ok) return true;
+      } catch {
+        // 超時／網路錯誤：雲端模式重試一次，否則直接 false
+      }
+    }
+    return false;
+  }
   try {
     const res = await fetchWithTimeout('/api/health', {}, 2000, fetchImpl);
     return res.ok;
   } catch {
     return false;
   }
+}
+
+/**
+ * /sync/* 請求完整 URL（path 如 '/bootstrap'、'/pull?since=3'、'/push'）。
+ * 本地模式：'/sync' + path（歷史行為逐字不變）。
+ * 雲端模式：syncUrl(path) 並以 query `?token=<syncToken>` 附帶配對 token ——
+ * Authorization 頭已由 anon key（cloudHeaders）佔用，query 方案與本地 server
+ * 的 `?token=` 支援一致（見 server/sync/routes.mjs），且避開 Authorization 衝突。
+ */
+export function syncEndpoint(path: string): string {
+  const url = syncUrl(path);
+  if (!isCloudMode()) return url;
+  const token = getSyncToken();
+  if (!token) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * /sync/* 請求鑑權標頭。
+ * 本地模式：authHeaders()（Authorization: Bearer <syncToken>），歷史行為不變。
+ * 雲端模式：cloudHeaders()（apikey + Authorization: Bearer <anon>）——
+ * sync token 不走 Authorization（已由 anon key 佔用），改由 syncEndpoint 的 query 附帶。
+ */
+export function syncAuthHeaders(): Record<string, string> {
+  return isCloudMode() ? cloudHeaders() : authHeaders();
 }
 
 /** 依目前頁面 host 構造 WS URL（開發時經 Vite proxy 轉發）。 */

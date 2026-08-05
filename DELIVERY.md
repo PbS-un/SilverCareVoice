@@ -9,12 +9,12 @@
 
 | 項目 | 狀態／值 |
 | --- | --- |
-| Functional Prototype URL | **待發布（PENDING）** —— 需由用戶 push 並啟用 GitHub Pages 後取得 |
-| GitHub Pages | **待用戶 push**（`.github/workflows/deploy-pages.yml` 已備妥；本地 `gh-pages` branch 已建） |
-| Release Branch | 本地 `gh-pages`（orphan branch）已建立，commit `a5c73e1`，內容為 `web/dist` 完整構建產物＋`.nojekyll`；**未 push** |
-| Backend | Local Node Sync Server（埠 8787）：AI Proxy（DeepSeek）＋雙裝置同步（HTTP + WebSocket + SQLite）。同步端點使用配對 token（見 server/README.md） |
-| AI | DeepSeek（經本地 proxy，Key 只存 `server/.env`）＋ **Local Hybrid Engine 離線 fallback**（無 Key／離線時全本地運行） |
-| Database | IndexedDB（Dexie，前端本地優先）＋ SQLite（server 同步中繼）；備選 Supabase schema 見 `supabase/` |
+| Functional Prototype URL | **已發布**：<https://pbs-un.github.io/SilverCareVoice/>（GitHub Pages 已上線；完成 Supabase 部署並設好 GitHub vars 後，該連結承載 100% 雲端功能——真 DeepSeek＋跨網雙裝置同步，見 [supabase/DEPLOYMENT.md](./supabase/DEPLOYMENT.md)） |
+| GitHub Pages | **已上線**（`.github/workflows/deploy-pages.yml`；CI 已預留 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 注入與 bundle 校驗） |
+| Release Branch | 本地 `gh-pages`（orphan branch）已建立，commit `a5c73e1`，內容為 `web/dist` 完整構建產物＋`.nojekyll` |
+| Backend | ① **Supabase 雲端後端（生產演示）**：Edge Function `supabase/functions/silvercare`（`/api/health`、`/api/ai/chat`、`/sync/*`）＋ Postgres op-log／LWW（`supabase/migrations/0001_sync_tables.sql`）＋ Realtime 廣播；部署指引見 [supabase/DEPLOYMENT.md](./supabase/DEPLOYMENT.md)。② Local Node Sync Server（埠 8787）：AI Proxy（DeepSeek）＋雙裝置同步（HTTP + WebSocket + SQLite），定位為本地開發／合約參照實現。同步端點皆使用配對 token（見 server/README.md） |
+| AI | DeepSeek（雲端經 Edge Function 代理，Key 只存 Supabase secrets；本地經 proxy，Key 只存 `server/.env`）＋ **Local Hybrid Engine 離線 fallback**（無 Key／離線／未配置雲端時全本地運行） |
+| Database | IndexedDB（Dexie，前端本地優先）＋ Postgres（雲端同步中繼，sync_ops／sync_entities）＋ SQLite（本地 server 同步中繼） |
 
 ## 2. 功能清單
 
@@ -46,9 +46,9 @@
 
 | 檔案 | 說明 |
 | --- | --- |
-| `deliverables/銀髮一句通_項目簡報.pdf` | **5 頁 A4**（pdf-lib 實測頁數 = 5，符合 ≤5 頁；595×842pt 標準 A4），內含 3 張實機 UI 截圖；URL/QR 為「待發布」佔位 |
+| `deliverables/銀髮一句通_項目簡報.pdf` | **5 頁 A4**（pdf-lib 實測頁數 = 5，符合 ≤5 頁；595×842pt 標準 A4），內含 3 張實機 UI 截圖；URL/QR 為正式連結 <https://pbs-un.github.io/SilverCareVoice/> |
 | `deliverables/demo.webm` | Demo 影片，**實測時長約 65 秒**（目標 60–120 秒），2.4 MB，真實操作不剪接 |
-| `README.md` | 完整繁體中文說明（兩種模式、快速開始、命令、架構、合規聲明） |
+| `README.md` | 完整繁體中文說明（三種模式——A 純前端／B 本地全棧／C Supabase 雲端、快速開始、命令、架構、合規聲明） |
 | `THIRD_PARTY.md` | 全部依賴清單（License 以 node_modules 實查核對） |
 | `scripts/generate-pdf.mjs` | PDF 生成腳本（支持 `--url <URL>` 重生成含真實 QR 版本） |
 | `scripts/generate-video.mjs` | 影片錄製腳本（Playwright recordVideo） |
@@ -61,7 +61,7 @@
 2. **雙端與資料流**：老人自由輸入→AI/Parser→Health Database→Risk Engine→Family Alert→Follow Up；實機截圖（/elder 回答氣泡＋/family/alerts）
 3. **慢病閉環**：記錄→趨勢→異常→提示→家屬→跟進→紀錄；/family/health 血壓圖實機截圖（截圖前實際新增一筆 162/98，圖表可見新點）
 4. **Database + AI Architecture**：Web Client→Safety Layer→Intent/Extraction→AI Provider(DeepSeek)+Knowledge Base→Repository→Database→Family/Insights；Consent/Audit/Privacy；標明 Demo triage rules 非醫療標準
-5. **Try it yourself**：Prototype URL＋QR（「待發布」佔位）＋GitHub Pages 佔位＋5 條評委可自行輸入的示例句子
+5. **Try it yourself**：Prototype URL＋QR（正式連結 <https://pbs-un.github.io/SilverCareVoice/>）＋5 條評委可自行輸入的示例句子
 
 ### Demo 影片內容（真實操作、不剪接）
 Demo Reset → 同意頁 → /elder 輸入「我啱啱血壓158/95，仲有啲頭暈」→ 回答氣泡與今日狀態 → 快捷量血壓新增 162/98 → /family/health 圖表新點 → /family/alerts 新 Alert → 已跟進（上門＋備註）→ 回 /elder 見「家人已經知道 ✓」
@@ -85,11 +85,13 @@ Demo Reset → 同意頁 → /elder 輸入「我啱啱血壓158/95，仲有啲�
 | 13 | Vitest 單元測試 | **PASS** | 實測 **17 files / 285 tests 全綠**（2026-08-05 最終整合驗證實測值） |
 | 14 | Playwright E2E | **PASS** | 實測 **16 passed**（30.5s） |
 | 15 | PDF ≤ 5 頁 | **PASS** | pdf-lib 實測 `getPageCount() === 5`，A4（595×842pt） |
-| 16 | GitHub Pages 線上可達 | **PENDING** | 需用戶 push 後才可驗證（見第 5 節） |
+| 16 | GitHub Pages 線上可達 | **PASS** | <https://pbs-un.github.io/SilverCareVoice/> 已上線 |
+| 17 | Supabase 雲端後端（Edge Function＋Postgres op-log/LWW＋Realtime） | **本地全量測試通過；雲端驗證待部署** | 代碼與遷移已就緒（`supabase/functions/silvercare`、`supabase/migrations/0001_sync_tables.sql`），本地全量測試（Vitest 285＋E2E 16）通過；線上驗證待完成 Supabase 部署與 GitHub vars 設定（步驟見 [supabase/DEPLOYMENT.md](./supabase/DEPLOYMENT.md)） |
 
 ## 5. 用戶手動發布最少步驟
 
-> 所有遠端操作均保留給用戶本人執行（本交付嚴禁 push）：
+> 正式連結已上線：<https://pbs-un.github.io/SilverCareVoice/>（GitHub Actions CI 自動部署）。
+> 以下步驟僅於需要從零重新發布時使用；所有遠端操作均保留給用戶本人執行（本交付嚴禁 push）：
 
 ```powershell
 # 1. 設定遠端（首次）
@@ -111,9 +113,8 @@ node scripts/generate-pdf.mjs --url <公開URL>
 
 ## 6. Limitations（已知限制）
 
-- **無真實雲端**：AI proxy 與 sync server 為本地 Node 進程（埠 8787），未部署任何雲端服務；Supabase schema 僅為備選藍圖。
+- **雲端後端已實現，線上驗證待部署**：Supabase 雲端後端（Edge Function `silvercare`＋Postgres op-log/LWW＋Realtime 廣播）已完成實現並整合 CI；**本地全量測試通過**（Vitest 285 cases＋E2E 16 cases），雲端線上驗證待完成 Supabase 部署與 GitHub vars 設定（見 [supabase/DEPLOYMENT.md](./supabase/DEPLOYMENT.md)）。本地 Node server（埠 8787）保留為本地開發／Mode B 與合約參照實現。
 - **語音依賴瀏覽器**：ASR/TTS 使用 Web Speech API，Chromium 系支援最佳；不支援時自動隱藏麥克風、文字輸入常駐（fallback 已測試）。
 - **Demo 規則非醫療標準**：內嵌 triage rules 僅供演示，不構成醫療建議或診斷。
 - **DeepSeek 需自備 Key**：無 Key 時全程 Local Hybrid Engine（確定性離線模式）；E2E/產物生成腳本為可重現性一律強制本地模式。
-- **PDF 內 URL/QR 為佔位**：待發布；依第 5 節步驟 5 重生成即可。
 - **影片為實時錄製**：無後製剪接，解析度 432×936（行動端視角）。

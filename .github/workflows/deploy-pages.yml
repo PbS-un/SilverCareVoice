@@ -41,8 +41,35 @@ jobs:
         run: npm ci --workspace web
 
       - name: Build web
+        # 注入 Supabase 後端配置（Task #3）：
+        #  - VITE_SUPABASE_URL：Edge Function 完整 base URL，
+        #    形如 https://<ref>.functions.supabase.co/silvercare
+        #  - VITE_SUPABASE_ANON_KEY：anon key（sync 端點實際不校驗 JWT，
+        #    僅供前端初始化 supabase client／Realtime 使用）
+        # 兩者於 GitHub repo Settings → Secrets and variables → Actions 設定
+        # （URL 用 variable，anon key 用 secret）。未設定時 web/ 自動降級為
+        # 純本地模式，保持向後相容。
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
         working-directory: web
+
+      - name: Verify backend URL inlined
+        # 校驗環境變數是否成功內聯進 bundle（Vite build-time 替換）：
+        #  - 若 repo 已設定 VITE_SUPABASE_URL：grep 確認 dist 內含
+        #    functions.supabase.co，缺失則失敗（避免靜默降級上線）。
+        #  - 若未設定：僅輸出警告，部署繼續（本地模式）。
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+        run: |
+          if [ -n "$VITE_SUPABASE_URL" ]; then
+            echo "VITE_SUPABASE_URL 已設定，校驗 bundle 內聯結果…"
+            grep -r "functions.supabase.co" web/dist || exit 1
+            echo "✓ bundle 已包含 Edge Function URL"
+          else
+            echo "::warning::未設定 VITE_SUPABASE_URL，本次部署為純本地模式"
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

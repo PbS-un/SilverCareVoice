@@ -1,5 +1,11 @@
 # SilverCare Voice — Server
 
+> **定位**：本 server 為**本地開發（模式 B）與合約參照實現**——`/api/*` 與
+> `/sync/*` 的 API／同步協議合約以此為準，Supabase Edge Function 實作同一
+> 合約。**生產演示後端為 Supabase**（Edge Function `supabase/functions/silvercare`
+> ＋Postgres op-log/LWW＋Realtime 廣播），部署與評委配對步驟見
+> [../supabase/DEPLOYMENT.md](../supabase/DEPLOYMENT.md)。
+
 單一 Node ESM 進程（Express + WS + SQLite，埠 8787），承載：
 
 - **A. DeepSeek AI Proxy**：密鑰安全邊界，前端永不接觸 API Key

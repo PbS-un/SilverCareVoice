@@ -15,6 +15,7 @@ import {
   type RiskLevel,
   type StructuredAnalysis,
 } from '../../types/ai';
+import { aiChatUrl, cloudHeaders, healthUrl } from '../../config/backend';
 
 /** 超時設定（毫秒） */
 const PROBE_TIMEOUT_MS = 5_000;
@@ -58,7 +59,7 @@ export async function probeProxy(force = false): Promise<boolean> {
   }
   let reachable = false;
   try {
-    const res = await fetchWithTimeout('/api/health', { method: 'GET' }, PROBE_TIMEOUT_MS);
+    const res = await fetchWithTimeout(healthUrl(), { method: 'GET', headers: { ...cloudHeaders() } }, PROBE_TIMEOUT_MS);
     if (res.ok) {
       const body = (await res.json().catch(() => null)) as { ok?: boolean } | null;
       reachable = body === null || body.ok !== false;
@@ -148,10 +149,10 @@ export async function chatViaProxy(
   let res: Response;
   try {
     res = await fetchWithTimeout(
-      '/api/ai/chat',
+      aiChatUrl(),
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...cloudHeaders() },
         body: JSON.stringify({ text, ...(context ? { context } : {}) }),
       },
       CHAT_TIMEOUT_MS,

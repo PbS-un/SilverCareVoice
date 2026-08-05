@@ -15,5 +15,8 @@
     "express": "^4.21.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "supabase": "^2.111.0"
   }
 }

@@ -20,11 +20,14 @@
 import type { IndexedDBProvider } from '../IndexedDBProvider';
 import type { BulkEntry } from '../DataProvider';
 import type { TableName, BaseEntity } from '../../types/entities';
+import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'; // 僅 type（runtime 動態 import）
+import { anonKey, isCloudMode, realtimeUrl } from '../../config/backend';
 import {
   LS_SYNC_CURSOR,
-  authHeaders,
   fetchWithTimeout,
   getSyncToken,
+  syncAuthHeaders,
+  syncEndpoint,
   tableOfEntity,
   wsUrl,
   type BootstrapEntity,
@@ -50,6 +53,16 @@ function backoffDelay(attempt: number): number {
   return Math.min(30_000, 1000 * 2 ** Math.max(0, attempt));
 }
 
+/**
+ * 雲端 Realtime 頻道 room：SHA-256(syncToken) hex 前 16 字元（Web Crypto）。
+ * 必須與 Task #1 Edge Function 的頻道命名一致（頻道名 scv-sync-<room>）。
+ */
+export async function cloudRoomId(syncToken: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(syncToken));
+  const hex = Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+  return hex.slice(0, 16);
+}
+
 /** 本地實體上記錄的最後寫入裝置欄位（LWW 平手 tiebreaker 用）。 */
 const WRITER_FIELD = '_writerDeviceId';
 
@@ -66,6 +79,13 @@ export class SyncClient {
   private attempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** 雲端模式變更通知（本地模式恒為 null）。 */
+  private supabase: SupabaseClient | null = null;
+  private cloudChannel: RealtimeChannel | null = null;
+  private cloudCatchUpTimer: ReturnType<typeof setInterval> | null = null;
+  /** catchUp 去重：進行中時不併發重入（Realtime 事件與 3s 兜底 interval 共用）。 */
+  private catchUpInFlight = false;
 
   constructor(inner: IndexedDBProvider, deviceId: string, opts: SyncClientOptions = {}) {
     this.inner = inner;
@@ -91,13 +111,17 @@ export class SyncClient {
     } catch {
       // 拉取失敗仍可繼續（WS 連線後 / 回前台時會再補）
     }
-    this.connect();
+    if (isCloudMode()) {
+      void this.connectCloud(); // 雲端：Realtime broadcast + 3s 兜底（不用 WS）
+    } else {
+      this.connect(); // 本地：WS /ws（代碼路徑逐字不變）
+    }
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this.onVisibility);
     }
   }
 
-  /** 停止：關 WS、清計時器、解除監聽。 */
+  /** 停止：關 WS／雲端頻道、清計時器、解除監聽。 */
   stop(): void {
     this.stopped = true;
     if (this.reconnectTimer !== null) {
@@ -107,6 +131,28 @@ export class SyncClient {
     if (this.keepaliveTimer !== null) {
       clearInterval(this.keepaliveTimer);
       this.keepaliveTimer = null;
+    }
+    // 雲端模式清理：3s 兜底 interval 與 Realtime 頻道／client
+    if (this.cloudCatchUpTimer !== null) {
+      clearInterval(this.cloudCatchUpTimer);
+      this.cloudCatchUpTimer = null;
+    }
+    const channel = this.cloudChannel;
+    this.cloudChannel = null;
+    if (channel) {
+      try {
+        void channel.unsubscribe();
+      } catch {
+        // ignore
+      }
+    }
+    if (this.supabase) {
+      try {
+        void this.supabase.removeAllChannels();
+      } catch {
+        // ignore
+      }
+      this.supabase = null;
     }
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.onVisibility);
@@ -128,9 +174,13 @@ export class SyncClient {
 
   /* ────────────────────────────── 補資料 ────────────────────────────── */
 
-  /** 帶鑑權標頭的 fetch。 */
-  private authFetch(url: string, timeoutMs = 10_000): Promise<Response> {
-    return fetchWithTimeout(url, { headers: { ...authHeaders() } }, timeoutMs, this.fetchImpl);
+  /**
+   * 帶鑑權的 sync fetch（path 如 '/bootstrap'、'/pull?since=3'）。
+   * 本地：'/sync'+path 與 Authorization: Bearer <syncToken>（歷史行為不變）。
+   * 雲端：syncUrl + `?token=<syncToken>` query 與 anon apikey 標頭（syncEndpoint / syncAuthHeaders）。
+   */
+  private authFetch(path: string, timeoutMs = 10_000): Promise<Response> {
+    return fetchWithTimeout(syncEndpoint(path), { headers: { ...syncAuthHeaders() } }, timeoutMs, this.fetchImpl);
   }
 
   /** 401 處理：標記未授權並提示配對方式（不再盲目重試）。 */
@@ -145,7 +195,7 @@ export class SyncClient {
 
   /** 首次加入：GET /sync/bootstrap 全量拉取並 LWW apply；cursor 取回傳 seq。 */
   async bootstrap(): Promise<void> {
-    const res = await this.authFetch('/sync/bootstrap');
+    const res = await this.authFetch('/bootstrap');
     if (res.status === 401) {
       this.markUnauthorized('bootstrap');
       throw new Error('bootstrap failed: HTTP 401 (unauthorized)');
@@ -176,7 +226,7 @@ export class SyncClient {
     let since: string = this.readCursor() ?? '';
     if (!since) return this.bootstrap();
     for (let page = 0; page < PULL_MAX_PAGES; page += 1) {
-      const res = await this.authFetch(`/sync/pull?since=${encodeURIComponent(since)}`);
+      const res = await this.authFetch(`/pull?since=${encodeURIComponent(since)}`);
       if (res.status === 401) {
         this.markUnauthorized('pull');
         throw new Error('pull failed: HTTP 401 (unauthorized)');
@@ -205,6 +255,70 @@ export class SyncClient {
       else await this.bootstrap();
     } catch {
       // ignore —— 不回 throw，避免阻塞 UI
+    }
+  }
+
+  /* ──────────────────────── 雲端變更通知 ──────────────────────── */
+
+  /**
+   * catchUp 去重包裝：進行中不併發重入（Realtime 'change' 事件與
+   * 3s 兜底 interval 可能同時觸發）。
+   */
+  private async catchUpOnce(): Promise<void> {
+    if (this.catchUpInFlight) return;
+    this.catchUpInFlight = true;
+    try {
+      await this.catchUp();
+    } finally {
+      this.catchUpInFlight = false;
+    }
+  }
+
+  /**
+   * 雲端模式變更通知（取代 WS，本地 WS 路徑絕不進入本函式）：
+   *  (a) @supabase/supabase-js Realtime broadcast 頻道 `scv-sync-<room>`
+   *      （room = SHA-256(syncToken) hex 前 16 字元，與 Task #1 Edge Function
+   *      發布端一致）訂閱 'change' 事件 → catchUp；
+   *  (b) 3 秒 setInterval 兜底 catchUp（Realtime 斷線也不漏變更）。
+   *
+   * supabase-js 採動態 import：本地模式 bundle 完全不含該依賴。
+   * 任何失敗只記錄不拋出 —— 兜底 interval 與回前台 pull 仍保證最終一致。
+   */
+  private async connectCloud(): Promise<void> {
+    if (this.stopped || this.unauthorized) return;
+    const token = getSyncToken();
+    try {
+      if (token) {
+        const room = await cloudRoomId(token);
+        if (this.stopped) return;
+        const projectUrl = realtimeUrl();
+        if (projectUrl) {
+          const { createClient } = await import('@supabase/supabase-js');
+          if (this.stopped) return;
+          const client = createClient(projectUrl, anonKey(), {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          this.supabase = client;
+          const channel = client.channel(`scv-sync-${room}`);
+          channel.on('broadcast', { event: 'change' }, () => {
+            void this.catchUpOnce();
+          });
+          await channel.subscribe();
+          if (this.stopped) return;
+          this.cloudChannel = channel;
+        } else {
+          console.warn('[sync] 雲端模式：無法推導 Supabase 項目 URL，僅以 3s 兜底 interval 補漏');
+        }
+      }
+      this.onConnected?.(); // 觸發 Outbox flush（對齊 WS hello_ok 行為）
+    } catch {
+      // Realtime 建立失敗：3s 兜底 interval 仍持續運作
+    }
+    if (this.stopped) return;
+    if (this.cloudCatchUpTimer === null) {
+      this.cloudCatchUpTimer = setInterval(() => {
+        void this.catchUpOnce();
+      }, 3000);
     }
   }
 

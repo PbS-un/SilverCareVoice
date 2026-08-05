@@ -1,0 +1,15 @@
+# SilverCareVoice — 專案層級 Supabase CLI 配置
+#
+# ⚠ Supabase CLI 只會讀取本檔（專案層級 supabase/config.toml）的
+#   [functions.<name>] section；函數目錄內的 functions/silvercare/config.toml
+#   不會被 CLI 讀取。本檔內容即合併自 functions/silvercare/config.toml
+#   （該檔僅作函數目錄內的配置記錄與說明），部署時以本檔為準。
+#
+# npm 依賴（zod、@supabase/supabase-js）經 index.ts 內的 `npm:` 規範
+# 導入，Deno Edge Runtime 自動解析，無需在此聲明。
+
+[functions.silvercare]
+# 本函數自帶 SYNC_TOKEN 鑑權（/sync/*）且 /api/* 為公開代理端點，
+# 不使用 Supabase JWT 校驗（客戶端為純 fetch，無 anon JWT）。
+verify_jwt = false
+# entrypoint 預設即 ./index.ts，無需顯式指定。
