@@ -50,3 +50,13 @@ test('refresh 後 session 保持登入', async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId('role-elder')).toBeVisible({ timeout: 30_000 });
 });
+
+test('從受保護路由登入後一定先進角色選擇（唔直接入 /elder）', async ({ page }) => {
+  await page.goto('/#/elder');
+  await expect(page.getByTestId('demo-login-form')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('demo-login-id').fill('tester');
+  await page.getByTestId('demo-login-password').fill('tester');
+  await page.getByTestId('demo-login-submit').click();
+  await expect(page.getByTestId('role-elder')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('text-input')).toHaveCount(0);
+});

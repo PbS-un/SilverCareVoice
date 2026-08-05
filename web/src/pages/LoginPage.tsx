@@ -6,7 +6,7 @@
  * 成功後 sessionStorage 記 demoAuthenticated=true，跳去角色選擇（/）。
  */
 import { useState, type FormEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import LanguageSelector from '../components/LanguageSelector';
 import { useI18n } from '../i18n';
@@ -15,13 +15,10 @@ import { validateDemoLogin, setDemoAuthenticated } from '../lib/demoAuth';
 export default function LoginPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const location = useLocation();
   const [id, setId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-
-  const from = (location.state as { from?: string } | null)?.from ?? '/';
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
@@ -32,9 +29,9 @@ export default function LoginPage() {
       return;
     }
     setBusy(true);
-    // 同步 sessionStorage 後直接跳角色選擇（一定先進 Role Selection，唔直接入 /elder）
+    // 同步 sessionStorage 後一定先進 Role Selection（/），唔直接入 /elder
     setDemoAuthenticated(true);
-    navigate(from === '/login' ? '/' : from, { replace: true });
+    navigate('/', { replace: true });
   };
 
   return (
