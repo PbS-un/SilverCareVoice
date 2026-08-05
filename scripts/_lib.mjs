@@ -72,8 +72,22 @@ export async function waitForUrl(url, timeoutMs = 60_000) {
  * 確定性：DEEPSEEK_API_KEY 強制設空字串 —— dotenv 不會覆蓋已存在的
  * 環境變數，故 server 一律走 provider:local（LocalHybridEngine），
  * 產出物不依賴真實 API Key。
+ * 安全：啟動前先確認 8787 未被佔用 —— 若已有 server（可能帶真實 Key），
+ * 直接報錯，避免產物腳本靜默連到不確定性後端。
  */
 export async function startServer() {
+  try {
+    const res = await fetch('http://localhost:8787/api/health', { signal: AbortSignal.timeout(1500) });
+    if (res.ok) {
+      throw new Error(
+        '埠 8787 已被另一個 server 佔用（可能載入了真實 DEEPSEEK_API_KEY）。' +
+          '請先停止該 dev server 再執行產物腳本，確保 provider:local 確定性。',
+      );
+    }
+  } catch (err) {
+    if (err?.message?.includes('埠 8787 已被另一個 server 佔用')) throw err;
+    // 其餘錯誤（拒絕連線／逾時）＝埠未被佔用，正常繼續
+  }
   const proc = spawnBg('node', ['index.mjs'], {
     cwd: path.join(ROOT, 'server'),
     env: { DEEPSEEK_API_KEY: '' },
