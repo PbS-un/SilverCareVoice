@@ -52,7 +52,10 @@
 | 檔案 | 說明 |
 | --- | --- |
 | `deliverables/銀髮一句通_項目簡報.pdf` | **5 頁 A4**（pdf-lib 實測頁數 = 5，符合 ≤5 頁；595×842pt 標準 A4），內含 3 張實機 UI 截圖；URL/QR 為正式連結 <https://pbs-un.github.io/SilverCareVoice/> |
-| `deliverables/demo.webm` | Demo 影片，**實測時長約 65 秒**（目標 60–120 秒），2.4 MB，真實操作不剪接 |
+| `deliverables/demo.webm` | Demo 影片，**實測時長約 96 秒**（目標 60–120 秒），含旁白音軌（VP9+Opus）與燒入繁體中文字幕，真實操作不剪接 |
+| `deliverables/demo.mp4` | 可選 H.264+AAC 版本（同內容） |
+| `deliverables/demo.srt` | 字幕 source（繁體中文） |
+| `deliverables/demo-narration.txt` | 旁白逐字稿（narrated voice-over，Windows SAPI zh-HK 合成，非真人錄音） |
 | `README.md` | 完整繁體中文說明（三種模式——A 純前端／B 本地全棧／C Supabase 雲端、快速開始、命令、架構、合規聲明） |
 | `THIRD_PARTY.md` | 全部依賴清單（License 以 node_modules 實查核對） |
 | `scripts/generate-pdf.mjs` | PDF 生成腳本（支持 `--url <URL>` 重生成含真實 QR 版本） |
@@ -61,15 +64,16 @@
 | `.github/workflows/deploy-pages.yml` | GitHub Pages workflow（push 後生效） |
 | `web/src/pages/PrintBrief.tsx` | 簡報打印頁（路由 /print-brief） |
 
-### PDF 頁面結構（5 頁）
-1. **封面**：銀髮一句通／澳門長者 AI 慢病照護與家庭守護平台／核心句／三大賣點（澳門×極簡、慢病×家庭、數據×長期價值）
-2. **雙端與資料流**：老人自由輸入→AI/Parser→Health Database→Risk Engine→Family Alert→Follow Up；實機截圖（/elder 回答氣泡＋/family/alerts）
-3. **慢病閉環**：記錄→趨勢→異常→提示→家屬→跟進→紀錄；/family/health 血壓圖實機截圖（截圖前實際新增一筆 162/98，圖表可見新點）
-4. **Database + AI Architecture**：Web Client→Safety Layer→Intent/Extraction→AI Provider(DeepSeek)+Knowledge Base→Repository→Database→Family/Insights；Consent/Audit/Privacy；標明 Demo triage rules 非醫療標準
-5. **Try it yourself**：Prototype URL＋QR（正式連結 <https://pbs-un.github.io/SilverCareVoice/>）＋5 條評委可自行輸入的示例句子
+### PDF 頁面結構（5 頁，T1 更新）
+1. **價值主張**：銀髮一句通 SilverCare Macau／澳門長者 AI 慢病照護與家庭守護平台／核心句／三項產品特點（一句即用、家庭閉環、多語澳門）
+2. **三項核心創新**：一句話完成健康互動（Speak once→Respond，含 AI 回答後自動朗讀）、家庭照護閉環（Elder→Continuous Record）、澳門四語言場景；實機截圖（/elder 回答氣泡＋/family/alerts）
+3. **技術棧與架構**：Frontend/Data/AI/Cloud/Local Sync/Voice/Engineering 八欄；三種運行模式（A/B/C）；Voice→Safety→AI+Local Hybrid→Data→Risk→Alert 架構；/family/health 血壓圖實機截圖
+4. **競品類別比較**：Health Tracking App／AI Voice Assistant／Wearable／SilverCare 能力表（✓/△），核心論點
+5. **未來願景**：NOW／NEXT（明確標示 future）／FUTURE；正式 URL＋QR＋Demo Login（tester/tester）
 
-### Demo 影片內容（真實操作、不剪接）
-Demo Reset → 同意頁 → /elder 輸入「我啱啱血壓158/95，仲有啲頭暈」→ 回答氣泡與今日狀態 → 快捷量血壓新增 162/98 → /family/health 圖表新點 → /family/alerts 新 Alert → 已跟進（上門＋備註）→ 回 /elder 見「家人已經知道 ✓」
+### Demo 影片內容（真實操作、不剪接，96 秒）
+Demo Login（tester/tester）→ 四語言切換 → Demo Reset → 同意頁 → /elder 輸入「我啱啱血壓158/95，仲有啲頭暈」→ 回答氣泡與自動 TTS → 今日狀態 → 快捷量血壓新增 162/98 → /family/health 圖表新點 → /family/alerts 新 Alert → 已跟進（上門＋備註）→ 回 /elder 見「家人已經知道 ✓」→ 結尾（三項重點＋正式 URL）
+字幕以 DOM overlay 燒入畫面（burned-in 繁體中文），另輸出 demo.srt；旁白為 Windows SAPI zh-HK 合成（narrated voice-over），自動朗讀時段刻意留白。
 
 ## 4. Verification 清單（全部本機實測）
 
