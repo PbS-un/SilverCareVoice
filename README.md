@@ -103,11 +103,9 @@ npm run dev:all        # server 8787 + web 5173
 | Demo 影片（真實操作、不剪接） | `deliverables/demo.webm` | `node scripts/generate-video.mjs` |
 | GitHub Pages 部署 | <https://pbs-un.github.io/SilverCareVoice/> ＋`.github/workflows/deploy-pages.yml` | `node scripts/deploy-pages.mjs`／CI 自動部署 |
 
-> **部署狀態（誠實）**：本輪新功能已 commit 並 push 到 `main`（構建與全部測試通過），但 GitHub Actions 的
-> `deploy-pages` 步驟連續失敗，且線上站台目前伺服嘅係舊 `gh-pages` branch 內容（不含本輪新功能）。
-> 最可能原因係 Pages source 已設為「Deploy from a branch: gh-pages」而非「GitHub Actions」。
-> 人工步驟：GitHub → Settings → Pages → Build and deployment → Source 改為「GitHub Actions」，
-> 再對 `main` 重新 push（或 re-run workflow），即可發布本輪功能。
+> **部署狀態**：本輪新功能已透過 GitHub Actions（Source = GitHub Actions）部署到
+> <https://pbs-un.github.io/SilverCareVoice/>，線上 smoke test 通過（100 長者選擇器登入、
+> tester 拒絕、四語、長者 AI、家屬頁）。`gh-pages` branch 亦同步更新為最新 build（備援路徑）。
 
 > PDF 與 QR 的公開 URL 已更新為正式連結 <https://pbs-un.github.io/SilverCareVoice/>；
 > 如 URL 變動，執行 `node scripts/generate-pdf.mjs --url <公開URL>` 即可一條命令重生成。
