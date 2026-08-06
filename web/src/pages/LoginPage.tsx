@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import LanguageSelector from '../components/LanguageSelector';
+import { demoReset } from '../data/demoReset';
 import { getProvider } from '../data/DataProvider';
 import { tableNameOf } from '../types/entities';
 import type { CaregiverLink, ElderProfile, User } from '../types/entities';
@@ -38,45 +39,62 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [reseedBusy, setReseedBusy] = useState(false);
+
+  const loadOptions = async (): Promise<void> => {
+    const provider = getProvider();
+    const [elders, users, links] = await Promise.all([
+      provider.list<ElderProfile>(tableNameOf('ElderProfile')),
+      provider.list<User>(tableNameOf('User')),
+      provider.list<CaregiverLink>(tableNameOf('CaregiverLink')),
+    ]);
+    const elderUsers = users.filter((u) => u.role === 'elder' && u.accountCode);
+    const linkByElder = new Map(links.map((l) => [l.elderId, l.caregiverId]));
+    const opts: DemoOption[] = elders
+      .map((e) => {
+        const account = elderUsers.find((u) => u.refId === e.id);
+        if (!account?.accountCode) return null;
+        return {
+          elderId: e.id,
+          elderName: e.name,
+          age: e.age,
+          accountCode: account.accountCode,
+          accountId: account.id,
+          caregiverId: linkByElder.get(e.id) ?? '',
+        };
+      })
+      .filter((o): o is DemoOption => o !== null && o.caregiverId !== '')
+      .sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+    setOptions(opts);
+  };
 
   // 由 DB 讀取 100 名合成長者與對應 account／guardian（App 啟動已完成 seed）
   useEffect(() => {
     let live = true;
-    (async () => {
-      try {
-        const provider = getProvider();
-        const [elders, users, links] = await Promise.all([
-          provider.list<ElderProfile>(tableNameOf('ElderProfile')),
-          provider.list<User>(tableNameOf('User')),
-          provider.list<CaregiverLink>(tableNameOf('CaregiverLink')),
-        ]);
-        if (!live) return;
-        const elderUsers = users.filter((u) => u.role === 'elder' && u.accountCode);
-        const linkByElder = new Map(links.map((l) => [l.elderId, l.caregiverId]));
-        const opts: DemoOption[] = elders
-          .map((e) => {
-            const account = elderUsers.find((u) => u.refId === e.id);
-            if (!account?.accountCode) return null;
-            return {
-              elderId: e.id,
-              elderName: e.name,
-              age: e.age,
-              accountCode: account.accountCode,
-              accountId: account.id,
-              caregiverId: linkByElder.get(e.id) ?? '',
-            };
-          })
-          .filter((o): o is DemoOption => o !== null && o.caregiverId !== '')
-          .sort((a, b) => a.accountCode.localeCompare(b.accountCode));
-        setOptions(opts);
-      } catch {
-        /* 載入失敗留空，由 UI 呈現載入中／空態 */
-      }
-    })();
+    loadOptions()
+      .catch(() => {
+        /* 載入失敗留空，由 UI 呈現空態 */
+      })
+      .finally(() => {
+        if (live) setLoaded(true);
+      });
     return () => {
       live = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** 空態兜底：舊版/雲端舊資料冇 demo account 時，一鍵重灌 100 名合成長者。 */
+  const reseed = async (): Promise<void> => {
+    setReseedBusy(true);
+    try {
+      await demoReset();
+      await loadOptions();
+    } finally {
+      setReseedBusy(false);
+    }
+  };
 
   const onSelect = (elderId: string): void => {
     const opt = options.find((o) => o.elderId === elderId) ?? null;
@@ -201,6 +219,23 @@ export default function LoginPage() {
             {t('login.notice')}
           </p>
         </form>
+
+        {loaded && options.length === 0 && (
+          <div className="card-elder flex flex-col gap-3">
+            <p data-testid="login-no-demo-data" className="text-xl text-[var(--sc-thinking)]">
+              {t('login.noDemoData')}
+            </p>
+            <button
+              type="button"
+              data-testid="login-reseed"
+              className="btn-elder btn-primary w-full"
+              onClick={() => void reseed()}
+              disabled={reseedBusy}
+            >
+              {reseedBusy ? t('login.submitting') : t('login.reseed')}
+            </button>
+          </div>
+        )}
       </section>
 
       <footer className="mt-6 border-t border-[var(--sc-line)] pt-4 text-center text-base text-[var(--sc-muted)]">

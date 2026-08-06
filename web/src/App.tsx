@@ -16,7 +16,8 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import { getProvider, enableSync } from './data/DataProvider';
 import { tableNameOf } from './types/entities';
-import { demoReset } from './data/demoReset';
+import { demoReset, shouldSeedDemoData } from './data/demoReset';
+import type { ElderProfile, User } from './types/entities';
 import { ensureKnowledgeLoaded } from './core/kb/search';
 import { LanguageProvider, useI18n } from './i18n';
 import RequireConsent from './components/RequireConsent';
@@ -54,7 +55,9 @@ function AppRoutes() {
         //    與既有 KB 文件寫入同行為）。
         const provider = getProvider();
         const elders = await provider.list(tableNameOf('ElderProfile'));
-        if (elders.length === 0) await demoReset();
+        const users = await provider.list<User>(tableNameOf('User'));
+        // 空庫（既有）或舊版/雲端舊資料冇 demo account → 重灌 100 名合成長者
+        if (shouldSeedDemoData(elders as ElderProfile[], users)) await demoReset();
         await ensureKnowledgeLoaded();
       } catch {
         /* 啟動容錯：即使載入出錯都呈現 UI，由頁面呈現空態 */
