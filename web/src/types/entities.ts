@@ -26,6 +26,10 @@ export interface User extends BaseEntity {
   /** 對應的長者或照顧者實體 ID。 */
   refId?: string;
   language?: 'zh-HK' | 'zh-TW' | 'en';
+  /** Demo account code（如 demo-001）：登入 username，密碼由 code 確定性衍生。 */
+  accountCode?: string;
+  /** 系統生成之合成示範資料標記（T1：100 合成長者）。 */
+  isSynthetic?: boolean;
 }
 
 /** 長者檔案。 */
@@ -37,6 +41,8 @@ export interface ElderProfile extends BaseEntity {
   language: 'zh-HK';
   address?: string;
   emergencyNote?: string;
+  /** 系統生成之合成示範資料標記（T1）。 */
+  isSynthetic?: boolean;
 }
 
 /** 照顧者（家人）。 */
@@ -44,6 +50,8 @@ export interface Caregiver extends BaseEntity {
   name: string;
   relation: string;
   phone: string;
+  /** 系統生成之合成示範資料標記（T1）。 */
+  isSynthetic?: boolean;
 }
 
 /** 長者 ↔ 照顧者授權關係（含長者同意）。 */

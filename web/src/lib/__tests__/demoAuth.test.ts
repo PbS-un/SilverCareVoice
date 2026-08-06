@@ -1,46 +1,51 @@
 /**
- * T3 Demo Login 單元測試：固定憑證、sessionStorage、trim ID。
+ * T3 Demo Login 單元測試：account code 衍生密碼、tester/tester 拒絕、session。
  */
 import {
-  DEMO_ID,
-  DEMO_PASSWORD,
-  AUTH_STORAGE_KEY,
+  demoPasswordFor,
+  getDemoSession,
   isDemoAuthenticated,
-  setDemoAuthenticated,
-  validateDemoLogin,
+  setDemoSession,
+  validateDemoCredentials,
 } from '../demoAuth';
 
-describe('validateDemoLogin', () => {
-  it('tester / tester 成功', () => {
-    expect(validateDemoLogin(DEMO_ID, DEMO_PASSWORD)).toBe(true);
+describe('demoPasswordFor / validateDemoCredentials', () => {
+  it('由 account code 衍生 deterministic 密碼', () => {
+    expect(demoPasswordFor('demo-001')).toBe('SCV-Demo!2026-001-Macau');
+    expect(demoPasswordFor('demo-100')).toBe('SCV-Demo!2026-100-Macau');
   });
 
-  it('ID 可 trim', () => {
-    expect(validateDemoLogin('  tester  ', DEMO_PASSWORD)).toBe(true);
+  it('正確憑證通過（ID 可 trim）', () => {
+    expect(validateDemoCredentials('demo-001', 'demo-001', 'SCV-Demo!2026-001-Macau')).toBe(true);
+    expect(validateDemoCredentials('demo-001', '  demo-001  ', 'SCV-Demo!2026-001-Macau')).toBe(true);
   });
 
-  it('錯誤密碼失敗', () => {
-    expect(validateDemoLogin(DEMO_ID, 'wrong')).toBe(false);
+  it('tester/tester 必然拒絕', () => {
+    expect(validateDemoCredentials('demo-001', 'tester', 'tester')).toBe(false);
+    expect(validateDemoCredentials(undefined, 'tester', 'tester')).toBe(false);
   });
 
-  it('錯誤 ID 失敗', () => {
-    expect(validateDemoLogin('admin', DEMO_PASSWORD)).toBe(false);
+  it('錯誤密碼／錯誤帳號失敗', () => {
+    expect(validateDemoCredentials('demo-001', 'demo-001', 'wrong')).toBe(false);
+    expect(validateDemoCredentials('demo-002', 'demo-001', 'SCV-Demo!2026-001-Macau')).toBe(false);
   });
 });
 
-describe('sessionStorage', () => {
+describe('sessionStorage demo session', () => {
   beforeEach(() => sessionStorage.clear());
 
-  it('setDemoAuthenticated(true) 後 isDemoAuthenticated 為 true（refresh 同 session 保持）', () => {
+  it('setDemoSession 後 isDemoAuthenticated 為 true，getDemoSession 回完整綁定', () => {
     expect(isDemoAuthenticated()).toBe(false);
-    setDemoAuthenticated(true);
-    expect(sessionStorage.getItem(AUTH_STORAGE_KEY)).toBe('true');
+    setDemoSession({
+      accountCode: 'demo-001',
+      accountId: 'a1',
+      elderId: 'seed-elder-01',
+      caregiverId: 'seed-caregiver-01',
+      elderName: '陳婆婆',
+    });
     expect(isDemoAuthenticated()).toBe(true);
-  });
-
-  it('setDemoAuthenticated(false) 清除登入狀態', () => {
-    setDemoAuthenticated(true);
-    setDemoAuthenticated(false);
-    expect(isDemoAuthenticated()).toBe(false);
+    const s = getDemoSession();
+    expect(s?.elderId).toBe('seed-elder-01');
+    expect(s?.caregiverId).toBe('seed-caregiver-01');
   });
 });

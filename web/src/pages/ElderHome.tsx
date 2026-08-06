@@ -19,9 +19,12 @@ import { getProvider } from '../data/DataProvider';
 import { demoReset } from '../data/demoReset';
 import { tableNameOf } from '../types/entities';
 import type { Alert, Appointment, Conversation, HealthEvent } from '../types/entities';
-import { isSpeechSupported, startListening, stopListening } from '../services/speech/asr';
+import { isSpeechSupported } from '../services/speech/asr';
+import { startSlowListening, stopSlowListening } from '../services/speech/slowSpeech';
 import { speak, stopSpeaking } from '../services/speech/tts';
 import { notifyFamily, recordBloodPressure } from '../lib/manualEntry';
+import { normalizeCantoneseNumbers } from '../lib/cantoneseNumbers';
+import { extractBloodPressure } from '../core/assistant/extraction';
 import { useAsyncData, useDbVersion, useElderContext } from '../lib/hooks';
 import { greetingByHour, fmtTime, isToday } from '../lib/format';
 import { toSpeechLang, useI18n } from '../i18n';
@@ -31,19 +34,23 @@ import MedicationLogModal from '../components/modals/MedicationLogModal';
 import AppointmentModal from '../components/modals/AppointmentModal';
 import { ContactCards, MedCandidatesCard, VoiceConfirmCard } from '../components/VoiceConfirmCard';
 
-type MicState = 'idle' | 'listening' | 'thinking' | 'done';
+type MicState = 'idle' | 'listening' | 'pausing' | 'thinking' | 'repeat' | 'done';
 
 const MIC_STYLE: Record<MicState, string> = {
   idle: 'bg-[var(--sc-idle)]',
   listening: 'bg-[var(--sc-listening)]',
+  pausing: 'bg-[var(--sc-thinking)]',
   thinking: 'bg-[var(--sc-thinking)]',
+  repeat: 'bg-[var(--sc-idle)]',
   done: 'bg-[var(--sc-ok)]',
 };
 
 const MIC_LABEL_KEY: Record<MicState, string> = {
   idle: 'elder.micIdle',
   listening: 'elder.micListening',
+  pausing: 'elder.micPausing',
   thinking: 'elder.micThinking',
+  repeat: 'elder.micRepeat',
   done: 'elder.micDone',
 };
 
@@ -67,10 +74,10 @@ export default function ElderHome() {
   /** 門控提議／「改一改」帶入嘅表單預填。 */
   const [formPrefill, setFormPrefill] = useState<OpenFormSuggestion['prefill'] | undefined>(undefined);
   const [toast, setToast] = useState('');
+  /** 溫和提示（例如「慢慢再講一次」），唔用紅色 error 樣式。 */
+  const [guidance, setGuidance] = useState('');
   /** 最後一次已自動播放嘅 assistant conversation id（exactly-once 防重播）。 */
   const autoplayedConvRef = useRef<string | null>(null);
-  const micStateRef = useRef<MicState>('idle');
-  micStateRef.current = micState;
 
   /* ---------------- 逃生艙（避免任何情境下永久轉圈） ---------------- */
   // 長者上下文持續為空超過 8 秒（如雲端未配對訪客資料未到位）時，
@@ -228,40 +235,64 @@ export default function ElderHome() {
 
   /* ---------------- 麥克風 ---------------- */
 
+  /** 溫和引導長者慢慢再講一次（local-first，唔經 LLM；自動 TTS 朗讀）。 */
+  const gentleRetry = (msg: string): void => {
+    setGuidance(msg);
+    setMicState('repeat');
+    stopSpeaking();
+    const ok = speak(msg, {
+      lang: toSpeechLang(locale),
+      onEnd: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
+    setSpeaking(ok);
+  };
+
+  /** 聚合 transcript 完成：太短／血壓提及但無完整數值 → 溫和提示。 */
+  const handleVoiceFinal = (raw: string): void => {
+    const text = normalizeCantoneseNumbers(raw);
+    const trimmed = text.trim();
+    if (trimmed.length < 3) {
+      gentleRetry(t('asr.retryGeneric'));
+      return;
+    }
+    if (/血壓|血压|上壓|上压|下壓|下压|高壓|低壓/.test(trimmed) && !extractBloodPressure(trimmed)) {
+      gentleRetry(t('asr.retryBp'));
+      return;
+    }
+    setGuidance('');
+    setText(trimmed);
+    void sendMessage(trimmed, 'voice');
+  };
+
   const toggleMic = (): void => {
     if (!speechOk) return;
     stopSpeaking();
     setSpeaking(false);
-    if (micState === 'listening') {
-      stopListening();
+    if (micState === 'listening' || micState === 'pausing') {
+      stopSlowListening();
       setMicState('idle');
       setInterim('');
       return;
     }
     setInterim('');
+    setGuidance('');
     setMicState('listening');
-    startListening(
-      {
-        onInterim: (txt) => setInterim(txt),
-        onResult: (txt) => {
-          setInterim('');
-          setText(txt);
-          void sendMessage(txt, 'voice');
-        },
-        onError: (err) => {
-          setErrorMsg(err.message);
-          setInterim('');
-          setMicState('idle');
-        },
-        onEnd: () => {
-          if (micStateRef.current === 'listening') setMicState('idle');
-        },
+    startSlowListening({
+      lang: toSpeechLang(locale),
+      onInterim: (txt) => setInterim(txt),
+      onFinal: (txt) => handleVoiceFinal(txt),
+      onState: (s) => {
+        if (s === 'listening') setMicState('listening');
+        else if (s === 'pausing') setMicState('pausing');
+        else if (s === 'processing') setMicState('thinking');
+        else if (s === 'repeat') setMicState('repeat');
+        else if (s === 'done') setMicState('done');
       },
-      toSpeechLang(locale),
-    );
+    });
   };
 
-  useEffect(() => () => stopListening(), []);
+  useEffect(() => () => stopSlowListening(), []);
 
   /* ---------------- TTS ---------------- */
 
@@ -354,6 +385,15 @@ export default function ElderHome() {
           <p className="text-xl font-bold" aria-live="polite">
             {interim || t(MIC_LABEL_KEY[micState])}
           </p>
+          {guidance && (
+            <p
+              role="status"
+              data-testid="voice-guidance"
+              className="rounded-xl bg-[var(--sc-idle-soft)] px-4 py-3 text-xl leading-relaxed text-[var(--sc-idle-deep)]"
+            >
+              {guidance}
+            </p>
+          )}
         </section>
       )}
 
@@ -797,6 +837,7 @@ function EmergencyOverlay({
 }) {
   const { t } = useI18n();
   const [showCall, setShowCall] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   const [busy, setBusy] = useState(false);
   const [alreadyAlert] = useState(Boolean(response.alertId));
 
@@ -830,7 +871,42 @@ function EmergencyOverlay({
           <p className="text-center text-xl leading-relaxed opacity-90">{response.detailedAnswer}</p>
         )}
 
-        {!showCall ? (
+        {confirmClose ? (
+          /* T5：二次確認 —— 「我冇事」唔可以一撳即走 */
+          <div
+            className="w-full max-w-md rounded-3xl bg-white p-6 text-[var(--sc-ink)] shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('emergency.confirmTitle')}
+            data-testid="emergency-close-confirm"
+          >
+            <h2 className="text-center font-serif-display text-3xl font-black">
+              {t('emergency.confirmTitle')}
+            </h2>
+            <p className="mt-3 text-center text-elder-body leading-relaxed">
+              {t('emergency.confirmBody')}
+            </p>
+            <div className="mt-6 flex flex-col gap-3">
+              <button
+                type="button"
+                data-testid="emergency-continue-help"
+                className="btn-elder w-full bg-[var(--sc-urgent)] !min-h-16 text-2xl text-white"
+                onClick={() => setConfirmClose(false)}
+                autoFocus
+              >
+                {t('emergency.continueHelp')}
+              </button>
+              <button
+                type="button"
+                data-testid="emergency-confirm-close"
+                className="btn-elder w-full border-2 border-[var(--sc-line)] bg-white !min-h-14 text-xl text-[var(--sc-ink)]"
+                onClick={onClose}
+              >
+                {t('emergency.confirmClose')}
+              </button>
+            </div>
+          </div>
+        ) : !showCall ? (
           <div className="flex w-full flex-col gap-3">
             <button
               type="button"
@@ -856,7 +932,7 @@ function EmergencyOverlay({
             <button
               type="button"
               className="btn-elder w-full bg-black/20 text-white"
-              onClick={onClose}
+              onClick={() => setConfirmClose(true)}
             >
               {t('emergency.close')}
             </button>

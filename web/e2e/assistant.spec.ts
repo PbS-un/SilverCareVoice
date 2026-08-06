@@ -72,11 +72,22 @@ test('場景4：胸痛 → 緊急模式 + 通知家人 + 999 + 家屬 urgent 提
   // 安全路徑已自動建立 Alert → 通知按鈕直接顯示「家人已收到通知 ✓」
   await expect(overlay.getByTestId('notify-family')).toHaveText('家人已收到通知 ✓');
 
-  // 緊急求助 → 999（撥號畫面）→ 返回 → 關閉
+  // 緊急求助 → 999（撥號畫面）→ 返回 → 關閉（T5：二次確認）
   await overlay.getByTestId('emergency-call').click();
   await expect(overlay.getByTestId('emergency-999')).toBeVisible();
   await overlay.getByText('返回', { exact: true }).click();
+  // 第一次「我冇事，關閉」→ 必須出現二次確認（唔可以一撳即走）
   await overlay.getByText('我冇事，關閉').click();
+  await expect(overlay.getByTestId('emergency-close-confirm')).toBeVisible();
+  await expect(overlay.getByText('你真係冇事？')).toBeVisible();
+  // 揀「我仲唔舒服，繼續求助」→ 維持緊急畫面
+  await overlay.getByTestId('emergency-continue-help').click();
+  await expect(overlay.getByTestId('emergency-close-confirm')).toHaveCount(0);
+  await expect(overlay.getByTestId('emergency-call')).toBeVisible();
+  // 再次關閉 → 二次確認 → 揀「我真係冇事，關閉提示」→ 先真正關閉
+  await overlay.getByText('我冇事，關閉').click();
+  await expect(overlay.getByTestId('emergency-close-confirm')).toBeVisible();
+  await overlay.getByTestId('emergency-confirm-close').click();
   await expect(overlay).toBeHidden();
 
   // 家屬端出現 urgent（緊急）提醒

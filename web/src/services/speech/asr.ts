@@ -123,8 +123,12 @@ export interface AsrDeps {
 
 export interface AsrInstance {
   isSupported(): boolean;
-  /** lang 缺省時用 ASR_LANG（zh-HK）；跟隨介面語言。 */
-  start(callbacks: AsrCallbacks, lang?: string): void;
+  /**
+   * lang 缺省時用 ASR_LANG（zh-HK）；跟隨介面語言。
+   * opts.continuous=true 時（T6 慢速語音）：每句 final chunk 繼續聆聽，
+   * 唔會即刻結束 session —— 由上層（silence 計時器）決定幾時收尾。
+   */
+  start(callbacks: AsrCallbacks, lang?: string, opts?: { continuous?: boolean }): void;
   stop(): void;
 }
 
@@ -213,7 +217,8 @@ export function createAsr(deps: AsrDeps = {}): AsrInstance {
     }
   }
 
-  function start(callbacks: AsrCallbacks, lang = ASR_LANG): void {
+  function start(callbacks: AsrCallbacks, lang = ASR_LANG, opts: { continuous?: boolean } = {}): void {
+    const continuous = opts.continuous ?? false;
     // 上一段聆聽未結束：先乾淨收尾，避免重複收音
     if (active) {
       active.dispose();
@@ -347,7 +352,7 @@ export function createAsr(deps: AsrDeps = {}): AsrInstance {
 
     instance.lang = lang;
     instance.interimResults = true;
-    instance.continuous = false;
+    instance.continuous = continuous;
 
     instance.onresult = (event: SpeechRecognitionEventLike): void => {
       if (ended) return;
@@ -366,8 +371,9 @@ export function createAsr(deps: AsrDeps = {}): AsrInstance {
       }
       if (finalText) {
         safeCall(() => callbacks.onResult(finalText.trim()));
-        // continuous=false：拿到 final 即本次聆聽完成
-        endSession();
+        // continuous=false：拿到 final 即本次聆聽完成；
+        // continuous=true：繼續聆聽（慢速語音，等待 8 秒 silence 由上層收尾）
+        if (!continuous) endSession();
       }
     };
 
@@ -415,8 +421,12 @@ export function isSpeechSupported(): boolean {
 }
 
 /** 開始聆聽（zh-HK）；不支援／出錯會走 callbacks.onError，絕不拋錯 */
-export function startListening(callbacks: AsrCallbacks, lang?: string): void {
-  defaultAsr.start(callbacks, lang);
+export function startListening(
+  callbacks: AsrCallbacks,
+  lang?: string,
+  opts?: { continuous?: boolean },
+): void {
+  defaultAsr.start(callbacks, lang, opts);
 }
 
 /** 停止聆聽；沒有進行中的聆聽時為 no-op，絕不拋錯 */

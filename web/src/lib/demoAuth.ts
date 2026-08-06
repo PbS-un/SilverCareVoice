@@ -1,37 +1,74 @@
 /**
- * Demo Login（T3）
+ * Demo Login（T3：100 合成長者 Account）
  *
- * 只係 Demo gate，唔係正式 authentication：
- *  - 固定憑證 ID/Password 均為 tester
- *  - sessionStorage 保存 demoAuthenticated（同一 tab/session refresh 保持登入，
- *    關閉 session 後重新要求 Login）
+ * 移除舊 tester/tester；每個 Demo account 對應「一名 Elder + 一名 Guardian」。
+ *  - username = accountCode（demo-001 … demo-100）
+ *  - password = SCV-Demo!2026-<NNN>-Macau（deterministic，密碼輸入保持 masked）
+ *  - sessionStorage 保存 account→elder→guardian 綁定，refresh 同 session 保持登入
+ *  - 本質上只係 frontend gating（GitHub Pages standalone 無法真正鑑權），README 已如實說明
  *  - 禁止把密碼存 localStorage／IndexedDB
  */
 
-export const DEMO_ID = 'tester';
-export const DEMO_PASSWORD = 'tester';
-export const AUTH_STORAGE_KEY = 'demoAuthenticated';
+export const AUTH_STORAGE_KEY = 'scv.demo.session.v1';
 
-/** 是否已通過 Demo Login（storage 不可用時視為未登入，絕不拋錯）。 */
-export function isDemoAuthenticated(): boolean {
+export interface DemoSession {
+  /** account code（demo-001 … demo-100），同時係登入 username。 */
+  accountCode: string;
+  accountId: string;
+  elderId: string;
+  caregiverId: string;
+  elderName: string;
+}
+
+/** 由 account code 衍生 deterministic demo password（例：SCV-Demo!2026-001-Macau）。 */
+export function demoPasswordFor(accountCode: string): string {
+  const num = /^demo-(\d+)$/.exec(accountCode.trim());
+  const seq = num ? num[1].padStart(3, '0') : '001';
+  return `SCV-Demo!2026-${seq}-Macau`;
+}
+
+/** 驗證 Demo 憑證：ID 可 trim，密碼精確比對衍生值（tester/tester 必然拒絕）。 */
+export function validateDemoCredentials(
+  accountCode: string | undefined,
+  id: string,
+  password: string,
+): boolean {
+  if (!accountCode) return false;
+  return id.trim() === accountCode.trim() && password === demoPasswordFor(accountCode);
+}
+
+/** 讀取目前登入 session（storage 不可用時回 null，絕不拋錯）。 */
+export function getDemoSession(): DemoSession | null {
   try {
-    return sessionStorage.getItem(AUTH_STORAGE_KEY) === 'true';
+    const raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DemoSession;
+    if (parsed && parsed.elderId && parsed.accountCode) return parsed;
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-/** 設定登入狀態（寫入失敗不影響流程）。 */
-export function setDemoAuthenticated(value: boolean): void {
+/** 寫入登入 session。 */
+export function setDemoSession(session: DemoSession): void {
   try {
-    if (value) sessionStorage.setItem(AUTH_STORAGE_KEY, 'true');
-    else sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
   } catch {
     /* 私隱模式等環境忽略 */
   }
 }
 
-/** 驗證 Demo 憑證：ID 可 trim，Password 精確比對。 */
-export function validateDemoLogin(id: string, password: string): boolean {
-  return id.trim() === DEMO_ID && password === DEMO_PASSWORD;
+/** 清除登入 session。 */
+export function clearDemoSession(): void {
+  try {
+    sessionStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 是否已通過 Demo Login。 */
+export function isDemoAuthenticated(): boolean {
+  return getDemoSession() !== null;
 }

@@ -19,9 +19,15 @@
 ## 2. 功能清單
 
 ### 本輪新增（T1 四語言／T2 自動朗讀／T3 Demo Login）
-- **Demo Login**：登入頁（tester / tester），sessionStorage 保持登入；未登入訪問受保護路由導向登入頁；`/print-brief` 保留公開例外（PDF 生成用）。
+- **100 名合成示範長者（T1/T3）**：deterministic seeded generator（固定 seed）產生 100 名澳門合成長者，每人一個 account（demo-001…demo-100）＋一名固定監護人；登入頁「示範長者選擇」揀一位即自動填入帳號／密碼（`SCV-Demo!2026-<NNN>-Macau`，masked）一鍵登入。舊 `tester/tester` 已完全移除並必然被拒絕。所有資料標記 `isSynthetic`，角色選擇頁顯示四語合成資料聲明。
+- **Account ↔ Elder ↔ Guardian 綁定（T2）**：登入 session 保存 account→elder→guardian；`useElderContext` 按 session 指定長者查詢，全部健康資料／對話／提醒以 elderId 於 repository 層真實隔離（唔係 UI filter）。
+- **Demo Reset（T4）**：清空後重新 deterministic seed 100 長者；account 關係與資料歸屬不變；language preference 不受影響。
 - **四語言 UI**：繁體中文／简体中文／Português／English；登入頁與角色選擇頁即時切換、`localStorage` 持久化；AI 回覆（DeepSeek prompt + Local Hybrid 本地化）、ASR／TTS（zh-HK／zh-CN／pt-PT／en-US）跟隨語言。
 - **Elder AI 自動朗讀**：每條新 assistant final answer 自動播放一次（exactly once）；rerender／歷史載入／語言切換／返回頁面不重播；手動播放保留。
+- **慢速／斷句語音（T6）**：8 秒停頓容忍、ASR 斷句聚合、35 秒上限、五種 voice state（聽／等待／處理／慢慢再講／完成）；四語溫和重試提示並自動朗讀（local-first，唔經 LLM）。
+- **AI 對話記憶（T7）**：每 account/長者最近約 10 句，由 DB 恢復，DeepSeek prompt 與 Local Hybrid 承接上下文；跨長者隔離。
+- **澳門語音適配（T8）**：粵語數字 normalisation（一百五十八／百五八／九五／七點二等）+ health-domain alternatives（maxAlternatives=3）。
+- **緊急二次確認（T5）**：「我冇事」必須二次確認（我真係冇事，關閉提示／我仲唔舒服，繼續求助），四語、大按鈕、aria 支援。
 
 ### 老人端（/elder、/elder/health）
 - 大麥克風語音輸入（ASR，4 狀態色）＋文字輸入（≥24px）雙通道
@@ -64,16 +70,17 @@
 | `.github/workflows/deploy-pages.yml` | GitHub Pages workflow（push 後生效） |
 | `web/src/pages/PrintBrief.tsx` | 簡報打印頁（路由 /print-brief） |
 
-### PDF 頁面結構（5 頁，T1 更新）
-1. **價值主張**：銀髮一句通 SilverCare Macau／澳門長者 AI 慢病照護與家庭守護平台／核心句／三項產品特點（一句即用、家庭閉環、多語澳門）
-2. **三項核心創新**：一句話完成健康互動（Speak once→Respond，含 AI 回答後自動朗讀）、家庭照護閉環（Elder→Continuous Record）、澳門四語言場景；實機截圖（/elder 回答氣泡＋/family/alerts）
-3. **技術棧與架構**：Frontend/Data/AI/Cloud/Local Sync/Voice/Engineering 八欄；三種運行模式（A/B/C）；Voice→Safety→AI+Local Hybrid→Data→Risk→Alert 架構；/family/health 血壓圖實機截圖
-4. **競品類別比較**：Health Tracking App／AI Voice Assistant／Wearable／SilverCare 能力表（✓/△），核心論點
-5. **未來願景**：NOW／NEXT（明確標示 future）／FUTURE；正式 URL＋QR＋Demo Login（tester/tester）
+### PDF 頁面結構（5 頁，T10 Competition Project Proposal 風格）
+1. **項目定位**：銀髮一句通 SilverCare Macau／澳門長者 AI 慢病家庭照護平台／Slogan「讓長者只說一句，讓家人少一份擔心」／六項定位重點
+2. **核心功能**：一句語音（語音→AI 理解→健康紀錄→風險評估→語音回覆）、慢病管理（血壓血糖心率體重食藥覆診）、AI 友善長者（慢速語音、8 秒停頓、四語提示、自動 TTS）；實機截圖（/elder 回答＋100 長者選擇）
+3. **家庭閉環＋本地化＋簡化技術**：長者→AI→Health Event→Family Alert→家人跟進→回流；澳門四語；技術只佔半頁（Local-first／Cloud Sync／Offline Fallback／Privacy-aware）；實機截圖（/family/alerts）
+4. **社會價值**：慢病管理更容易／獨居長者與照護人互通／長者取得健康資訊更容易／協助醫療分流（誠實定位：不作醫療診斷、不取代醫生）
+5. **未來方向**：Wearable 自動化／社工＋醫院＋家庭三方／合規匿名健康資料庫／線上家庭醫生／更多數據提升 AI（全部標示 roadmap，唔當已完成）
+> 簡報唔包含 prototype URL／QR／Demo 憑證／登入教學（評審導向）。
 
-### Demo 影片內容（真實操作、不剪接，96 秒）
-Demo Login（tester/tester）→ 四語言切換 → Demo Reset → 同意頁 → /elder 輸入「我啱啱血壓158/95，仲有啲頭暈」→ 回答氣泡與自動 TTS → 今日狀態 → 快捷量血壓新增 162/98 → /family/health 圖表新點 → /family/alerts 新 Alert → 已跟進（上門＋備註）→ 回 /elder 見「家人已經知道 ✓」→ 結尾（三項重點＋正式 URL）
-字幕以 DOM overlay 燒入畫面（burned-in 繁體中文），另輸出 demo.srt；旁白為 Windows SAPI zh-HK 合成（narrated voice-over），自動朗讀時段刻意留白。
+### Demo 影片（T11：3 分鐘豎屏 1080×1920@30，H.264+AAC）
+痛點（warm placeholder，可替換真人鏡頭）→ Demo 長者選擇器登入 → 慢速斷句語音（scripted ASR chunks＋8 秒停頓）→ AI 回答＋自動 TTS → 家庭提醒＋跟進＋回流「家人已經知道 ✓」→ 四語言切換 → Local-first＋Cloud → 差異化＋社會價值 → 未來願景＋正式 URL 結尾。
+字幕雙行燒入（繁中＋简中，自然表達），另輸出 demo.srt；旁白為粵語（Windows SAPI zh-HK 合成，narrated voice-over），自動 TTS 時段留白；BGM 為 scripts/_bgm.mjs 生成嘅原創舒緩鋼琴感琶音；真人鏡頭缺失時生成 VIDEO_LIVE_ACTION_SHOTLIST.md 說明替換位置。
 
 ## 4. Verification 清單（全部本機實測）
 
@@ -91,8 +98,8 @@ Demo Login（tester/tester）→ 四語言切換 → Demo Reset → 同意頁 �
 | 10 | Safety flow（高風險攔截唔行 LLM） | **PASS** | Vitest `safetyScreen.test.ts`（15） |
 | 11 | Persistence（reload 後數據仍在） | **PASS** | E2E `persistence.spec.ts` |
 | 12 | Lint／Build | **PASS** | `tsc --noEmit` 零錯誤；`vite build` 成功（886 modules） |
-| 13 | Vitest 單元測試 | **PASS** | 實測值見最終驗證報告（T1–T3 新增 login／i18n／localize／ElderHome autoplay 測試） |
-| 14 | Playwright E2E | **PASS** | 實測值見最終驗證報告（新增 login／language／elder-tts spec） |
+| 13 | Vitest 單元測試 | **PASS** | 實測 **32 files / 492 tests 全綠**（含 syntheticDemo／demoAuth／memory／slowSpeech／cantoneseNumbers／LoginPage 等新增） |
+| 14 | Playwright E2E | **PASS** | 實測 **36 passed**（含 100 長者選擇器登入、tester 拒絕、緊急二次確認、TTS autoplay） |
 | 15 | PDF ≤ 5 頁 | **PASS** | pdf-lib 實測 `getPageCount() === 5`，A4（595×842pt） |
 | 16 | GitHub Pages 線上可達 | **PASS** | <https://pbs-un.github.io/SilverCareVoice/> 已上線 |
 | 17 | Supabase 雲端後端（Edge Function＋Postgres op-log/LWW＋Realtime） | **本地全量測試通過；雲端驗證待部署** | 代碼與遷移已就緒（`supabase/functions/silvercare`、`supabase/migrations/0001_sync_tables.sql`），本地全量測試（Vitest 285＋E2E 16）通過；線上驗證待完成 Supabase 部署與 GitHub vars 設定（步驟見 [supabase/DEPLOYMENT.md](./supabase/DEPLOYMENT.md)） |

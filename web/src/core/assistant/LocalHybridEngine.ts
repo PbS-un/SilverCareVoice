@@ -241,6 +241,12 @@ export class LocalHybridEngine {
    */
   analyze(text: string, _context: AssistantContext = {}): StructuredAnalysis {
     const normalized = (text ?? '').trim()
+    // T7：最近對話記憶（同 elder scope）——承接上一句嘅健康主題
+    const recentMessages =
+      (_context as { recentMessages?: Array<{ role: string; message: string }> }).recentMessages ?? []
+    const lastAssistant = [...recentMessages].reverse().find((m) => m.role === 'assistant')
+    const contextMentionsBp =
+      lastAssistant && /血壓|上壓|下壓|高壓|低壓/.test(lastAssistant.message)
 
     // 1. 安全篩查（先於一切分析）
     const safety = screenHighRiskTerms(normalized)
@@ -375,12 +381,18 @@ export class LocalHybridEngine {
           break
 
         case 'unknown':
-        default:
+        default: {
           // 溫和兜底：原文存為 wellbeing note，絕不說「只支援預設問題」
-          answer = '我明白你嘅情況，已經幫你記低。如果有唔舒服記得話我知。'
+          // T7：承接上一句血壓話題（例如「咁我要唔要休息？」）
+          if (contextMentionsBp && /^(咁|咁樣|咁呀|那|那麼|咁我)/.test(normalized)) {
+            answer = '你啱啱講嘅血壓情況要留意，建議坐低休息吓，遲啲再量多次。'
+          } else {
+            answer = '我明白你嘅情況，已經幫你記低。如果有唔舒服記得話我知。'
+          }
           detailedAnswer = normalized || undefined
           actions = [{ type: 'save_wellbeing_note', label: '記低近況' }]
           break
+        }
       }
     }
 

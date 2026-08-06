@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getProvider } from '../data/DataProvider';
 import { tableNameOf } from '../types/entities';
 import type { Caregiver, CaregiverLink, ElderProfile } from '../types/entities';
+import { getDemoSession } from './demoAuth';
 
 /**
  * 訂閱資料層寫入／同步事件：任何表有變更即回傳新版本號，
@@ -70,7 +71,11 @@ export function useElderContext(dbVersion: number): ElderContextData | null {
   const { data } = useAsyncData(async () => {
     const provider = getProvider();
     const elders = await provider.list<ElderProfile>(tableNameOf('ElderProfile'));
-    const elder = elders[0];
+    // T2/T3：Account → Elder 綁定 —— 優先取登入 session 指定嘅長者；
+    // 冇 session（向後兼容測試／未登入直接渲染）先 fallback 第一筆。
+    const session = getDemoSession();
+    const elder =
+      (session ? elders.find((e) => e.id === session.elderId) : undefined) ?? elders[0];
     if (!elder) return null;
     const links = (
       await provider.list<CaregiverLink>(tableNameOf('CaregiverLink'), { elderId: elder.id })

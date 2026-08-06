@@ -53,17 +53,17 @@ describe('IndexedDBProvider — seed 寫入與查詢', () => {
 
   it('list filter 淺層比對有效', async () => {
     const missed = await provider.list<MedicationLog>('medicationLogs', { status: 'missed' });
-    expect(missed).toHaveLength(1);
-    expect(missed[0].id).toBe('seed-ml-12');
+    expect(missed.length).toBeGreaterThan(0);
+    expect(missed.map((m) => m.id)).toContain('seed-ml-12'); // 陳婆婆（elder 01）嘅 missed
     const all = await provider.list<MedicationLog>('medicationLogs', { elderId: ELDER_ID });
     expect(all).toHaveLength(18);
   });
 
   it('seed 各表數量正確', async () => {
     expect(await provider.list('vitalRecords')).toHaveLength(SEED_VITAL_COUNT);
-    expect(await provider.list('elderProfiles')).toHaveLength(1);
-    expect(await provider.list('caregivers')).toHaveLength(1);
-    expect(await provider.list('medications')).toHaveLength(2);
+    expect(await provider.list('elderProfiles')).toHaveLength(100); // T1：100 名合成長者
+    expect(await provider.list('caregivers')).toHaveLength(100); // 每名長者一名監護人
+    expect(await provider.list('medications')).toHaveLength(seedData.medications.length);
     expect(await provider.list('resourceDirectory')).toHaveLength(6);
     expect(await provider.list('knowledgeDocuments')).toHaveLength(KNOWLEDGE_BASE.length); // T9 已導入知識庫
   });

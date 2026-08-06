@@ -14,6 +14,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { demoReset } from '../../data/demoReset';
 import { LanguageProvider } from '../../i18n';
+import { setDemoSession } from '../../lib/demoAuth';
 import ElderHome from '../ElderHome';
 import type { AssistantResponse } from '../../core/assistant/AssistantService';
 
@@ -68,6 +69,13 @@ describe('ElderHome TTS autoplay exactly once', () => {
     askMock.mockReset();
     speakMock.mockReset();
     await demoReset();
+    setDemoSession({
+      accountCode: 'demo-001',
+      accountId: 'seed-user-elder',
+      elderId: 'seed-elder-01',
+      caregiverId: 'seed-caregiver-01',
+      elderName: '陳婆婆',
+    });
   });
 
   it('新 answer 自動播放一次；rerender 不重播；第二個新 answer 再播一次；manual 保留', async () => {

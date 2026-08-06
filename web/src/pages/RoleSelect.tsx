@@ -8,7 +8,7 @@ import { demoReset } from '../data/demoReset';
 import SyncBadge from '../components/SyncBadge';
 import LanguageSelector from '../components/LanguageSelector';
 import { useI18n } from '../i18n';
-import { setDemoAuthenticated } from '../lib/demoAuth';
+import { clearDemoSession } from '../lib/demoAuth';
 
 export default function RoleSelect() {
   const { t } = useI18n();
@@ -45,6 +45,13 @@ export default function RoleSelect() {
           {t('role.title')}
         </h1>
         <p className="text-elder-body text-[var(--sc-ink-soft)]">{t('role.subtitle')}</p>
+
+        <p
+          data-testid="synthetic-notice"
+          className="rounded-xl border border-[var(--sc-line)] bg-white/70 px-4 py-3 text-base leading-relaxed text-[var(--sc-muted)]"
+        >
+          {t('synthetic.notice')}
+        </p>
 
         <div className="flex flex-col gap-4">
           <button
@@ -162,7 +169,7 @@ export default function RoleSelect() {
         data-testid="logout-button"
         className="mt-3 text-center text-base font-bold text-[var(--sc-muted)] underline underline-offset-4"
         onClick={() => {
-          setDemoAuthenticated(false);
+          clearDemoSession();
           navigate('/login', { replace: true });
         }}
       >

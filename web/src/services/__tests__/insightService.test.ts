@@ -36,10 +36,12 @@ describe('InsightService.getInsights — DB 聚合', () => {
     const provider = getProvider();
     const insights = await getInsights();
 
-    // seed：高血壓 + 糖尿病 各一
+    // seed：按 100 名合成長者嘅慢病分佈實算（高血壓／糖尿病由 generator 產生）
     const dist = Object.fromEntries(insights.chronicConditionDistribution.map((d) => [d.type, d.count]));
-    expect(dist.hypertension).toBe(1);
-    expect(dist.diabetes).toBe(1);
+    const condCount = (type: string): number =>
+      seedData.chronicConditions.filter((c) => c.type === type).length;
+    expect(dist.hypertension).toBe(condCount('hypertension'));
+    expect(dist.diabetes).toBe(condCount('diabetes'));
 
     const logs = await provider.list<MedicationLog>(tableNameOf('MedicationLog'));
     const taken = logs.filter((l) => l.status === 'taken' || l.status === 'late').length;

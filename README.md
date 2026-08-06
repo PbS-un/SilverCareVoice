@@ -17,9 +17,16 @@
 - 只部署 `web/dist` 靜態檔，**無需任何後端**。
 - 資料存於瀏覽器 **IndexedDB（Dexie）**；AI 走 **Local Hybrid Engine**（本地意圖識別＋規則引擎），離線可用。
 - 適合評委一鍵體驗：打開 URL 即用，Demo Reset 可還原示範資料。
-- **Demo Login**：打開即見登入頁，ID／Password 均為 `tester`（sessionStorage 保持同 session 登入）；登入後才可進入角色選擇與各功能頁。
+- **100 名合成示範長者（Demo Login）**：登入頁提供「示範長者選擇」，共 100 位澳門合成長者，每人一個 account（`demo-001`…`demo-100`）＋一名固定監護人；揀一位長者後帳號與密碼（`SCV-Demo!2026-<NNN>-Macau`，deterministic）自動填入，一鍵登入。登入後才可進入角色選擇與各功能頁；帳號→長者→監護人綁定，健康資料按長者真實隔離（repository 層按 elderId 查詢，非 UI filter）。舊 `tester/tester` 已移除且必然被拒絕。
 - **四語言 UI**：繁體中文／简体中文／Português／English，登入頁與角色選擇頁即時切換、`localStorage` 保留；AI 回覆、ASR／TTS 語音跟隨所選語言。
 - **Elder 自動朗讀**：長者端 AI 回答完成後自動朗讀一次（TTS 跟隨語言）；重新渲染／歷史載入／返回頁面不會重播，手動播放按鈕保留。
+- **慢速／斷句語音**：長者講一句中間停頓（8 秒內）唔會中斷，ASR 斷句聚合後再一次過送入 AI；最長錄音 35 秒；太短／血壓數字唔完整時顯示四語溫和提示並自動朗讀（「慢慢再講一次，我聽住你」），唔會話「識別失敗」。
+- **AI 對話記憶**：每個 account/長者獨立嘅最近約 10 句對話記憶，由 DB 恢復；唔同長者嘅 conversation 天然隔離。
+- **澳門語音適配**：粵語數字 normalisation（一百五十八／百五八／九五／七點二 → 158／95／7.2）等。
+- **緊急二次確認**：緊急提示頁「我冇事」必須經二次確認（「我真係冇事，關閉提示」／「我仲唔舒服，繼續求助」），四語支援。
+- **合成資料聲明**：所有示範長者健康資料標記 `isSynthetic`，角色選擇頁顯示「以下健康資料為系統生成的示範資料，並非真實患者資料。」（四語）。
+
+> 誠實說明：GitHub Pages standalone 嘅 Demo Login 本質上只係前端 gate（無真後端鑑權）；100 個 account 用 deterministic 密碼，只供功能展示，唔係正式 authentication。
 
 ### 模式 B：本地雙裝置（Sync Server + DeepSeek Proxy）
 
@@ -62,7 +69,7 @@ npm run dev:all        # server 8787 + web 5173
 #    重啟 server 即生效；不填則全程離線本地模式。
 ```
 
-打開 http://localhost:5173 → Demo Login（tester / tester）→ 選擇「我是長者」或「我是家人」。
+打開 http://localhost:5173 → Demo Login（揀示範長者，例如 demo-001 陳婆婆）→ 選擇「我是長者」或「我是家人」。
 
 ### Seed 與 Demo Reset
 
@@ -79,8 +86,8 @@ npm run dev:all        # server 8787 + web 5173
 | `npm run dev:server` | 後端 server（8787） |
 | `npm run dev:all` | 前後端同時啟動 |
 | `npm run build` | 構建前端（tsc --noEmit + vite build → web/dist） |
-| `npm test` | 單元測試（Vitest，實測 17 files / 285 cases） |
-| `npm run test:e2e` | E2E 測試（Playwright，16 cases） |
+| `npm test` | 單元測試（Vitest，實測 32 files / 492 cases） |
+| `npm run test:e2e` | E2E 測試（Playwright，36 cases） |
 | `node scripts/generate-pdf.mjs` | 生成項目簡報 PDF（≤5 頁 A4，內含實機截圖） |
 | `node scripts/generate-pdf.mjs --url <URL>` | 發布後重生成 PDF（真實 URL + QR Code） |
 | `node scripts/generate-video.mjs` | 錄製 60–120 秒真實操作 Demo 影片（webm） |

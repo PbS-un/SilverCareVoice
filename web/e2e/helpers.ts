@@ -1,17 +1,21 @@
 /**
  * T10 E2E 共用工具：
- * - login：經真實 UI 完成 Demo Login（tester / tester）→ 角色選擇
+ * - login：經真實 UI 完成 Demo Login（選示範長者 demo-001 陳婆婆）→ 角色選擇
  * - bypassConsent：用 localStorage 標記略過同意畫面（等同用戶已同意）
  * - demoResetViaUI：經真實 UI 執行 Demo 重置
  * - askElder：文字輸入 → 發送 → 等待回答氣泡
  */
 import { expect, type Page } from '@playwright/test';
 
-/** 經真實 UI 執行 Demo Login（tester / tester）→ 等到角色選擇頁。 */
+/** 經真實 UI 執行 Demo Login：選 demo-001（陳婆婆）→ 一鍵登入 → 角色選擇頁。 */
 export async function login(page: Page): Promise<void> {
   await page.goto('/');
-  await page.getByTestId('demo-login-id').fill('tester');
-  await page.getByTestId('demo-login-password').fill('tester');
+  await page.getByTestId('demo-elder-select').waitFor({ state: 'visible', timeout: 30_000 });
+  // 100 名長者：確保選項已載入
+  await expect(page.getByTestId('demo-elder-select').locator('option[value="seed-elder-01"]')).toHaveCount(1, {
+    timeout: 30_000,
+  });
+  await page.getByTestId('demo-elder-select').selectOption('seed-elder-01');
   await page.getByTestId('demo-login-submit').click();
   await expect(page.getByTestId('role-elder')).toBeVisible({ timeout: 30_000 });
 }

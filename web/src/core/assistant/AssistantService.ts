@@ -161,6 +161,8 @@ export const MAX_PENDING_TURNS = 2;
 export interface AssistantContext extends LocalContext {
   /** 目前選定語言（T1.4）：DeepSeek prompt 與本地回覆翻譯使用；缺省 zh-HK。 */
   locale?: AppLocale;
+  /** 最近對話記憶（T7：每 account/elder 獨立，約 10 句，由 DB 恢復）。 */
+  recentMessages?: Array<{ role: 'elder' | 'assistant'; message: string }>;
   /** 輸入方式（決定 VitalRecord.source），預設 'text'；語音入口傳 'voice'。 */
   source?: VitalSource;
   /** 內部用：原始輸入文字（症狀記錄 description 用）。 */
@@ -204,6 +206,24 @@ function newId(): string {
 
 function isoNow(): string {
   return new Date().toISOString();
+}
+
+/**
+ * T7：載入某長者最近 N 句對話（elder/assistant，依 createdAt 排序）。
+ * 以 elderId scope —— 唔同 account 嘅 conversation 天然隔離。
+ */
+export async function loadRecentConversations(
+  elderId: string,
+  limit = 10,
+  excludeId?: string,
+): Promise<Array<{ role: 'elder' | 'assistant'; message: string }>> {
+  const rows = await getProvider().list<Conversation>(tableNameOf('Conversation'), { elderId });
+  return rows
+    .filter((c) => c.role === 'elder' || c.role === 'assistant')
+    .filter((c) => c.id !== excludeId)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .slice(-limit)
+    .map((c) => ({ role: c.role as 'elder' | 'assistant', message: c.message }));
 }
 
 function daysAgoISO(days: number, from = Date.now()): string {
@@ -1318,6 +1338,10 @@ export async function ask(
   const savedUserConv = await provider.put<Conversation>(tableNameOf('Conversation'), userConv);
   addPersisted(persisted, tableNameOf('Conversation'), savedUserConv.id);
 
+  // T7：AI 對話加入最近約 10 句記憶（同 elder scope；排除本輪未完成 user 句）
+  const recentMessages = await loadRecentConversations(elderId, 10, savedUserConv.id);
+  ctx.recentMessages = recentMessages;
+
   /** 收尾：寫 assistant Conversation + AuditLog，補 user conv intent。 */
   const finish = async (
     res: Omit<AssistantResponse, 'persisted'>,
@@ -1435,7 +1459,11 @@ export async function ask(
   let providerField: AssistantResponse['provider'];
   const reachable = await probeProxy();
   if (reachable) {
-    const proxyResult = await chatViaProxy(normalized, { userName: ctx.userName, locale });
+    const proxyResult = await chatViaProxy(normalized, {
+      userName: ctx.userName,
+      locale,
+      ...(ctx.recentMessages ? { recentMessages: ctx.recentMessages } : {}),
+    });
     if (proxyResult.analysis && (proxyResult.provider === 'deepseek' || proxyResult.provider === 'safety')) {
       analysis = proxyResult.analysis;
       providerField = proxyResult.provider;
