@@ -10,7 +10,7 @@
 | 項目 | 狀態／值 |
 | --- | --- |
 | Functional Prototype URL | **已發布**：<https://pbs-un.github.io/SilverCareVoice/>（GitHub Pages 已上線；完成 Supabase 部署並設好 GitHub vars 後，該連結承載 100% 雲端功能——真 DeepSeek＋跨網雙裝置同步，見 [supabase/DEPLOYMENT.md](./supabase/DEPLOYMENT.md)） |
-| GitHub Pages | **已上線**（`.github/workflows/deploy-pages.yml`；CI 已預留 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 注入與 bundle 校驗） |
+| GitHub Pages | **DEPLOYMENT BLOCKED（見下）**：workflow 存在且 build PASS，但 `deploy-pages` 步驟連續失敗；線上站台現時伺服舊 `gh-pages` branch 內容。需要 repo 管理員將 Pages Source 設回「GitHub Actions」後 re-run |
 | Release Branch | 本地 `gh-pages`（orphan branch）已建立，commit `a5c73e1`，內容為 `web/dist` 完整構建產物＋`.nojekyll` |
 | Backend | ① **Supabase 雲端後端（生產演示）**：Edge Function `supabase/functions/silvercare`（`/api/health`、`/api/ai/chat`、`/sync/*`）＋ Postgres op-log／LWW（`supabase/migrations/0001_sync_tables.sql`）＋ Realtime 廣播；部署指引見 [supabase/DEPLOYMENT.md](./supabase/DEPLOYMENT.md)。② Local Node Sync Server（埠 8787）：AI Proxy（DeepSeek）＋雙裝置同步（HTTP + WebSocket + SQLite），定位為本地開發／合約參照實現。同步端點皆使用配對 token（見 server/README.md） |
 | AI | DeepSeek（雲端經 Edge Function 代理，Key 只存 Supabase secrets；本地經 proxy，Key 只存 `server/.env`）＋ **Local Hybrid Engine 離線 fallback**（無 Key／離線／未配置雲端時全本地運行） |
