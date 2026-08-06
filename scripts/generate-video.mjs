@@ -166,12 +166,12 @@ async function installSpeechStub(page) {
       }
       start() {
         this.onstart?.({});
-        this._after(600, () => this._emit('今日血壓'));
-        this._after(2600, () => this._emit(null, '今日血壓'));
-        this._after(3400, () => this._emit('一百五十八'));
-        this._after(5200, () => this._emit(null, '一百五十八'));
-        this._after(5800, () => this._emit('九十五'));
-        this._after(7400, () => this._emit(null, '九十五'));
+        this._after(600, () => this._emit('今日血壓，'));
+        this._after(2600, () => this._emit(null, '今日血壓，'));
+        this._after(3400, () => this._emit('一百五十八，'));
+        this._after(5200, () => this._emit(null, '一百五十八，'));
+        this._after(5800, () => this._emit('九十五，'));
+        this._after(7400, () => this._emit(null, '九十五，'));
         this._after(8200, () => this._emit('有少少頭暈'));
         this._after(9800, () => this._emit(null, '有少少頭暈'));
         // 之後靜音 —— 由 App 嘅 8 秒 silence 計時器收尾
@@ -371,8 +371,18 @@ async function main() {
     // 撳咪 → stub 分四段講（中間有停頓）→ 8 秒 silence 收尾 → AI 回答 + 自動 TTS
     await page.getByTestId('mic-button').click();
     await sleep(16_000); // 等足 stub 發聲 + 8 秒 silence + AI 處理
-    await page.getByTestId('answer-bubble').waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined);
-    await page.getByTestId('answer-bubble').scrollIntoViewIfNeeded();
+    const bubble = page.getByTestId('answer-bubble');
+    const answered = await bubble
+      .waitFor({ state: 'visible', timeout: 25_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!answered) {
+      // 兜底（例如 ASR 環境差異）：用文字輸入同一句，確保影片有 AI 回答片段
+      await page.getByTestId('text-input').fill('我啱啱血壓158/95，仲有啲頭暈');
+      await page.getByTestId('send-button').click();
+      await bubble.waitFor({ state: 'visible', timeout: 30_000 });
+    }
+    await bubble.scrollIntoViewIfNeeded();
     await sleep(3_000);
     await mark('tts');
     await sleep(5_000); // 自動朗讀時段，旁白留白
